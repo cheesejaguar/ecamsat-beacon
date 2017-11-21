@@ -1,5 +1,5 @@
 #Prompt user to paste beacon packet
-packet = raw_input("Please past the entire 64 character beacon packet: ")
+packet = raw_input("Please post the entire 64 character beacon packet: ")
 
 #Parse packets into individual fields
 busTime = packet[14:20] #6 bytes
@@ -16,8 +16,7 @@ TaosR = packet[52:56] #4 bytes
 TaosG = packet[56:60] #4 bytes
 TaosB = packet[60:64] #4 bytes
 
-#Convert hex to decimal
-
+#Convert little endian to big endian function
 def reverseEndian(byte,length):
     if length is 2:
         return bytes
@@ -40,8 +39,6 @@ CardTempM = reverseEndian(CardTempM,4)
 TaosR = reverseEndian(TaosR,4)
 TaosG = reverseEndian(TaosG,4)
 TaosB = reverseEndian(TaosB,4)
-
-#Convert counts to values
 
 #Figure out which set of data this is
 DataType = (int(WellNumber,16) % 4) + 1
@@ -95,14 +92,14 @@ if DataType is 4:
     #Convert Data
     ExpPhase = bin(int(Health0,16))
     CommV = (float(int(Health1,16)) * 0.0119) + 0.01
-    SensorV = (float(int(Health2,16)) * 0.0130) - 0.48
+    BusV = (float(int(Health2,16)) * 0.0059)
     WrapCount = int(Health3,16) 
     #Print Data
     print("Experiment phase: " + str(ExpPhase))
     print("Comm Voltage (V): " + str(CommV))
-    print("Sensor Voltage (V): " + str(SensorV))
+    print("Bus Voltage (V): " + str(BusV))
     print("Register File Wrap Count " + str(WrapCount))
-print("PageNumber: " + str(int(PageNumber,16)))
+print("Payload Page Number: " + str(int(PageNumber,16)))
 CardTempM = float(int(CardTempM,16)) / 100
 print("Median Card Temperature (C): " + str(CardTempM))
 print("Well Number: " + str(int(WellNumber,16)))
