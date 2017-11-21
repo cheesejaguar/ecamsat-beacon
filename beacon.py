@@ -1,10 +1,20 @@
 #This script was written by Aaron Cohen on 11/20/2017
 #Based on information from publicly available beacon decoding instructions found on ecamsat.org
 # http://ecamsat.engr.scu.edu/beacon/EcAMSatBeaconDecoding.pdf
+inputGood = 0
+while inputGood is 0:
 #Prompt user to paste beacon packet
-packet = raw_input("Please post the entire 64 character beacon packet: ")
+	packet = raw_input("Please post the entire 64 character beacon packet: ")
+	length = len(packet)
 #WARNING: some terminals decode consecutive spaces as a single space
 #Later there will be input validation but for now I'm lazy
+	if packet[0:14] != 'EcAMSat.org   ':
+		print("Incorrect data format, please try again")
+	elif length != 64:
+		print("Beacon packet of incorrect length")
+	else:
+		inputGood = 1
+
 
 #Parse packets into individual fields
 busTime = packet[14:20] #6 bytes
