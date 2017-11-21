@@ -1,5 +1,10 @@
+#This script was written by Aaron Cohen on 11/20/2017
+#Based on information from publicly available beacon decoding instructions found on ecamsat.org
+# http://ecamsat.engr.scu.edu/beacon/EcAMSatBeaconDecoding.pdf
 #Prompt user to paste beacon packet
 packet = raw_input("Please post the entire 64 character beacon packet: ")
+#WARNING: some terminals decode consecutive spaces as a single space
+#Later there will be input validation but for now I'm lazy
 
 #Parse packets into individual fields
 busTime = packet[14:20] #6 bytes
