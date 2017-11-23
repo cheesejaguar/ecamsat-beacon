@@ -62,14 +62,18 @@ print("Bus Time (seconds): " + str(int(busTime,16)))
 #Convert Solar Panel Currents
 if DataType is 1:
     SolarI = float(int(SolarI,16)) * 1.8678 + 3.41
+    SolarT = float(int(SolarT,16)) * 0.0557 - 15.37
 if DataType is 2:
     SolarI = float(int(SolarI,16)) * 0.9542 - 1.07
+    SolarT = float(int(SolarT,16)) * 0.0563 - 15.85
 if DataType is 3:
     SolarI = float(int(SolarI,16)) * 1.8785 - 0.41
+    SolarT = float(int(SolarT,16)) * 0.0559 - 14.56
 if DataType is 4:
     SolarI = float(int(SolarI,16)) * 0.9562 - 1.04
+    SolarT = float(int(SolarT,16)) * 0.0560 - 15.75
 print("Solar Panel " + str(DataType) + " current (mA): " + str(SolarI))
-print("Solar Panel " + str(DataType) + " temperature (C): " + str(float(int(SolarT,16))/100)) 
+print("Solar Panel " + str(DataType) + " temperature (C): " + str(SolarT))
 if DataType is 1:
     #Convert Data
     powerPort = bin(int(Health0,16))
