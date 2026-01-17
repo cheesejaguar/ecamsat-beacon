@@ -13,15 +13,16 @@ EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of micr
 - **Complete Telemetry**: Decodes all 4 data types with calibrated sensor values
 - **Sample Packets**: Built-in sample packets for testing
 - **API Documentation**: Auto-generated OpenAPI/Swagger docs
+- **100% Test Coverage**: Comprehensive test suite with full coverage
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.10 or higher
-- pip (Python package manager)
+- [UV](https://docs.astral.sh/uv/) (recommended) or pip
 
-### Installation
+### Installation with UV (Recommended)
 
 1. Clone the repository:
    ```bash
@@ -29,7 +30,20 @@ EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of micr
    cd ecamsat-beacon
    ```
 
-2. Create a virtual environment (recommended):
+2. Install dependencies with UV:
+   ```bash
+   uv sync
+   ```
+
+### Installation with pip (Alternative)
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ecamsat-beacon.git
+   cd ecamsat-beacon
+   ```
+
+2. Create a virtual environment:
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -37,24 +51,44 @@ EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of micr
 
 3. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -e .
    ```
 
 ### Running the Application
 
-Start the server:
+With UV:
+```bash
+uv run python run.py
+```
+
+With pip/venv:
 ```bash
 python run.py
 ```
 
-Or with development mode (auto-reload):
+With development mode (auto-reload):
 ```bash
-python run.py --reload
+uv run python run.py --reload
 ```
 
 Then open your browser to:
 - **Web Interface**: http://127.0.0.1:8000
 - **API Documentation**: http://127.0.0.1:8000/docs
+
+## Testing
+
+Run the test suite with coverage:
+
+```bash
+uv run pytest
+```
+
+This will run all tests and display a coverage report. The project maintains 100% test coverage.
+
+To run tests without coverage:
+```bash
+uv run pytest --no-cov
+```
 
 ## Usage
 
@@ -141,10 +175,14 @@ ecamsat-beacon/
 │       │   └── style.css
 │       └── js/
 │           └── app.js
+├── tests/
+│   ├── test_decoder.py  # Decoder unit tests
+│   ├── test_api.py      # API endpoint tests
+│   └── test_models.py   # Pydantic model tests
 ├── beacons/
 │   └── beacon.txt.txt   # Sample beacon packets
 ├── beacon.py            # Original CLI decoder (legacy)
-├── requirements.txt
+├── pyproject.toml       # Project configuration
 ├── run.py               # Server startup script
 └── README.md
 ```
@@ -158,6 +196,22 @@ ecamsat-beacon/
 | `/api/samples` | GET | Get sample beacon packets |
 | `/health` | GET | Health check endpoint |
 | `/docs` | GET | OpenAPI documentation |
+
+## Development
+
+### Adding Dependencies
+
+```bash
+uv add <package>           # Add runtime dependency
+uv add --dev <package>     # Add development dependency
+```
+
+### Running Linters
+
+```bash
+uv run ruff check .        # Run linter
+uv run ruff format .       # Format code
+```
 
 ## Credits
 
