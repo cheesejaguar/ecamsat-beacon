@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcAMSat Beacon Decoder</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="satellite-icon">
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="35" y="35" width="30" height="30" rx="3" fill="currentColor"/>
+                        <rect x="5" y="40" width="25" height="20" rx="2" fill="currentColor" opacity="0.8"/>
+                        <rect x="70" y="40" width="25" height="20" rx="2" fill="currentColor" opacity="0.8"/>
+                        <circle cx="50" cy="25" r="5" fill="currentColor"/>
+                        <line x1="50" y1="30" x2="50" y2="35" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>EcAMSat</h1>
+                    <span class="subtitle">Beacon Decoder</span>
+                </div>
+            </div>
+            <p class="description">Decode telemetry data from NASA's E. coli AntiMicrobial Satellite</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <div class="input-header">
+                    <h2>Beacon Packet</h2>
+                    <button id="load-sample" class="btn btn-secondary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Load Sample
+                    </button>
+                </div>
+                <div class="input-wrapper">
+                    <textarea
+                        id="packet-input"
+                        placeholder="Paste your 64-character beacon packet here...&#10;&#10;Example: EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B"
+                        rows="3"
+                    ></textarea>
+                    <div class="char-count">
+                        <span id="char-count">0</span>/64 characters
+                    </div>
+                </div>
+                <button id="decode-btn" class="btn btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    Decode Packet
+                </button>
+                <div id="error-message" class="error-message hidden"></div>
+            </section>
+
+            <section id="results-section" class="results-section hidden">
+                <h2>Decoded Telemetry</h2>
+
+                <div class="results-grid">
+                    <!-- Bus Time Card -->
+                    <div class="result-card bus-time-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div class="card-content">
+                            <span class="card-label">Bus Time</span>
+                            <span class="card-value" id="bus-time">--</span>
+                            <span class="card-unit">seconds</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Type Card -->
+                    <div class="result-card data-type-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </div>
+                        <div class="card-content">
+                            <span class="card-label">Data Type</span>
+                            <span class="card-value" id="data-type">--</span>
+                            <span class="card-unit" id="data-type-name">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Well Number Card -->
+                    <div class="result-card well-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                            </svg>
+                        </div>
+                        <div class="card-content">
+                            <span class="card-label">Well Number</span>
+                            <span class="card-value" id="well-number">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Page Number Card -->
+                    <div class="result-card page-card">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                            </svg>
+                        </div>
+                        <div class="card-content">
+                            <span class="card-label">Payload Page</span>
+                            <span class="card-value" id="page-number">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Solar Panel Section -->
+                <div class="panel-section">
+                    <h3>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                        </svg>
+                        Solar Panel <span id="solar-panel-num">--</span>
+                    </h3>
+                    <div class="panel-grid">
+                        <div class="panel-item">
+                            <span class="panel-label">Current</span>
+                            <span class="panel-value" id="solar-current">--</span>
+                            <span class="panel-unit">mA</span>
+                        </div>
+                        <div class="panel-item">
+                            <span class="panel-label">Temperature</span>
+                            <span class="panel-value" id="solar-temp">--</span>
+                            <span class="panel-unit">&deg;C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Type-Specific Data Section -->
+                <div class="panel-section type-data-section">
+                    <h3 id="type-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        Type-Specific Data
+                    </h3>
+                    <div id="type-data-grid" class="panel-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Temperature Section -->
+                <div class="panel-section">
+                    <h3>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                        </svg>
+                        Temperature
+                    </h3>
+                    <div class="panel-grid">
+                        <div class="panel-item">
+                            <span class="panel-label">Median Card Temp</span>
+                            <span class="panel-value" id="card-temp">--</span>
+                            <span class="panel-unit">&deg;C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Light Sensors Section -->
+                <div class="panel-section light-section">
+                    <h3>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        TAOS Light Sensors
+                    </h3>
+                    <div class="light-sensors-grid">
+                        <div class="light-sensor red">
+                            <div class="sensor-color"></div>
+                            <span class="sensor-label">Red</span>
+                            <span class="sensor-value" id="taos-r">--</span>
+                            <span class="sensor-unit">Hz</span>
+                        </div>
+                        <div class="light-sensor green">
+                            <div class="sensor-color"></div>
+                            <span class="sensor-label">Green</span>
+                            <span class="sensor-value" id="taos-g">--</span>
+                            <span class="sensor-unit">Hz</span>
+                        </div>
+                        <div class="light-sensor blue">
+                            <div class="sensor-color"></div>
+                            <span class="sensor-label">Blue</span>
+                            <span class="sensor-value" id="taos-b">--</span>
+                            <span class="sensor-unit">Hz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw Packet Display -->
+                <div class="raw-packet-section">
+                    <h3>Raw Packet</h3>
+                    <code id="raw-packet">--</code>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>
+                Based on <a href="http://ecamsat.engr.scu.edu/beacon/EcAMSatBeaconDecoding.pdf" target="_blank">EcAMSat Beacon Decoding</a> documentation
+            </p>
+            <p class="credits">
+                Original decoder by Aaron Cohen (2017) | API by Claude
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
