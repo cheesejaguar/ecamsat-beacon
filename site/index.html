@@ -1586,10 +1586,12 @@ async function runDecode(packetIn, { fly = true } = {}) {
   const rows = Object.fromEntries(parts.map(f => { const r = stepRow(f); steps.appendChild(r); return [f.key, r]; }));
   setStatus('Receiving…');
 
-  // 1. print the packet onto the tape
+  // 1. receive it: the packet's real AFSK burst plays (and crosses the waterfall)
+  //    while its characters print onto the tape
+  const burst = sound.beacon(packet);
   renderTape(packet, true);
   const chars = [...$('#tapeText').querySelectorAll('.ch')];
-  const per = reducedMotion ? 0 : 14 * tempo();
+  const per = reducedMotion ? 0 : Math.max(14 * tempo(), (burst * 1000) / chars.length);
   for (let i = 0; i < chars.length; i++) {
     if (!live()) return;
     chars[i].classList.remove('pending');
@@ -1708,23 +1710,31 @@ function viridis(t) {
   const a = VIRIDIS[i], b = VIRIDIS[Math.min(i + 1, VIRIDIS.length - 1)];
   return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
 }
-let wfData;
-function drawWaterfall() {
+let wfData, wfLast = 0, wfCarry = 0;
+const WF_ROWS_PER_SECOND = 40;
+/** Scroll by elapsed time, not by frame, so a burst leaves the same streak at any frame rate. */
+function drawWaterfall(now) {
   const c = $('#waterfall'), g = c.getContext('2d');
-  if (!sound.analyser || !panelOpen) return;
+  if (!sound.analyser || !panelOpen) { wfLast = 0; return; }
+  wfCarry += wfLast ? Math.min(1, (now - wfLast) / 1000) * WF_ROWS_PER_SECOND : 1;
+  wfLast = now;
+  const rows = Math.floor(wfCarry);
+  if (!rows) return;
+  wfCarry -= rows;
   const an = sound.analyser;
   wfData = wfData || new Uint8Array(an.frequencyBinCount);
   an.getByteFrequencyData(wfData);
-  g.drawImage(c, 0, 0, c.width, c.height - 1, 0, 1, c.width, c.height - 1);
-  const row = g.createImageData(c.width, 1);
+  g.drawImage(c, 0, 0, c.width, c.height - rows, 0, rows, c.width, c.height - rows);
+  const img = g.createImageData(c.width, rows);
   const hzPerBin = sound.ctx.sampleRate / an.fftSize, maxHz = 3500;
-  for (let x = 0; x < c.width; x++) {
-    const bin = Math.floor((x / c.width) * maxHz / hzPerBin);
-    const v = wfData[bin] / 255;
-    const [r, gg, b] = viridis(0.12 + v * 1.1);
-    row.data.set([r, gg, b, 255], x * 4);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < c.width; x++) {
+      const v = wfData[Math.floor((x / c.width) * maxHz / hzPerBin)] / 255;
+      const [r, gg, b] = viridis(0.08 + Math.random() * 0.09 + v * 1.1);   // speckled noise floor + signal
+      img.data.set([r, gg, b, 255], (y * c.width + x) * 4);
+    }
   }
-  g.putImageData(row, 0, 0);
+  g.putImageData(img, 0, 0);
 }
 
 /* =====================================================================
@@ -2114,7 +2124,7 @@ function frame(now) {
     tele.acc += real * 8;
     if (tele.acc >= 1) { const step = Math.floor(tele.acc); tele.acc -= step; if (tele.i + step >= BUS.t.length) { tele.playing = false; $('#btnPlay').textContent = '▶'; } setTele(tele.i + step); }
   }
-  if (panelOpen) drawWaterfall();
+  drawWaterfall(now);
   (view === 'orbit' ? orbitControls : craftControls).update();
   composer.render();
 }
@@ -2139,7 +2149,7 @@ async function boot() {
   setupTelemetry(); bindUI();
   const results = selfTest();
   console.table(results);
-  window.__ecamsat = { selfTest, decodeBeacon, plausibilityWarnings, sim, tele, BEACONS: () => BEACONS, BUS: () => BUS, setView: v => setView(v), decode: (p, o) => decode(p, o), three: { renderer, composer, craftScene, orbitScene, craftCam, orbitCam, craft, card, earth, station, deployDoor, craftPivot, attitude, craftControls } };
+  window.__ecamsat = { selfTest, decodeBeacon, plausibilityWarnings, sim, tele, BEACONS: () => BEACONS, BUS: () => BUS, setView: v => setView(v), decode: (p, o) => decode(p, o), sound, three: { renderer, composer, craftScene, orbitScene, craftCam, orbitCam, craft, card, earth, station, deployDoor, craftPivot, attitude, craftControls } };
   $('#btnPower').disabled = false;
   $('#powerLabel').textContent = 'Arm the deployer';
   $('#btnPower').addEventListener('click', powerOn);
