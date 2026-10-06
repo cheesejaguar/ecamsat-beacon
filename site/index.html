@@ -679,6 +679,11 @@ class SoundEngine {
     this.tone({ t: t + 0.01, freq: 620, freqEnd: 380, dur: 0.7, gain: 0.07, type: 'triangle' });
     this.noise({ t: t + 0.02, dur: 1.2, freq: 900, sweep: 300, q: 6, gain: 0.05 });
   }
+  twang() {
+    if (!this.ok()) return; const t = this.now;
+    this.noise({ t, dur: 0.03, freq: 3200, q: 3, gain: 0.25 });
+    this.tone({ t, freq: 780, freqEnd: 520, dur: 0.6, gain: 0.05, type: 'triangle' });
+  }
   wake() {
     if (!this.ok()) return; const t = this.now;
     [392, 587, 784, 1175].forEach((f, i) => this.tone({ t: t + i * 0.22, freq: f, freqEnd: f * 1.01, dur: 2.4, gain: 0.04, attack: 0.6 }));
@@ -782,8 +787,6 @@ craftScene.add(sunLight);
 const earthShine = new THREE.DirectionalLight(0x8fb4ff, 0.75);
 earthShine.position.set(0, -100, -25);
 craftScene.add(earthShine, new THREE.AmbientLight(0x404a60, 0.18));
-const wellLight = new THREE.PointLight(0xff60b0, 0, 26, 2);
-craftScene.add(wellLight);
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(craftScene, craftCam);
@@ -1073,20 +1076,19 @@ function buildCraft() {
   }
   craft.add(bolts);
 
-  // UHF beacon antenna: a white ~17 cm whip (a quarter wave at 437 MHz) standing out
-  // sideways from the copper-side top corner of the +X end, as in the lab photos
-  const ant = new THREE.Group();
+  // UHF beacon antenna: a white ~17 cm whip (a quarter wave at 437 MHz) hinged at the
+  // copper-side top corner of the +X end. In the deployer it lies folded flat along the
+  // top face, held down by the rails; once released it springs out sideways (+Z).
+  const hinge = new THREE.Group();
+  hinge.name = 'uhf';                    // rotation.y: 0 = stowed along −X, π/2 = deployed
   const rodGeo = new THREE.CylinderGeometry(0.12, 0.12, 17, 8);
-  rodGeo.translate(0, 8.5, 0);
+  rodGeo.rotateZ(Math.PI / 2); rodGeo.translate(-8.5, 0, 0);
   const rod = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({ color: 0xf2f2ee, metalness: 0.1, roughness: 0.45 }));
-  rod.name = 'uhf';
-  rod.scale.y = 0.01;   // stowed until EcAMSat is clear of the deployer
-  ant.add(rod);
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 1.4), mats.gold);
-  ant.add(foot);
-  ant.position.set(L / 2 - 0.4, H6 / 2 - 0.2, W6 / 2 - 0.4);
-  ant.rotation.set(Math.PI / 2 - 0.1, 0, -0.12);   // +Y of the rod → +Z, tipped slightly up and out
-  craft.add(ant);
+  hinge.add(rod);
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 12), mats.gold);
+  hinge.add(foot);
+  hinge.position.set(L / 2 - 0.5, H6 / 2 + 0.35, W6 / 2 - 0.7);
+  craft.add(hinge);
 
   craft.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 }
@@ -1096,7 +1098,7 @@ function buildCraft() {
    ===================================================================== */
 const card = new THREE.Group();
 const wells = [];   // { mesh, mat, glow, base }
-let cardLeader;
+let cardLeader, wellMarker;
 // alamarBlue colours per row, after NASA's photo of a filled card (middle row unfilled)
 const ROW_COLOURS = [0xd4428f, 0xc23396, 0xe8eef2, 0xc8305e, 0x8a3fa8];
 function buildCard() {
@@ -1129,6 +1131,16 @@ function buildCard() {
   const label = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.8), new THREE.MeshStandardMaterial({ map: barcodeTex(), roughness: 0.7 }));
   label.rotation.x = -Math.PI / 2; label.position.set(1.2, CT / 2 + 0.01, -CD / 2 + 0.5);
   card.add(label);
+  // Marker for the active well: a crisp ring plus one expanding ping. Both stay at or
+  // below 1.0 so the bloom pass (threshold 1.25) never smears them into neighbours.
+  wellMarker = new THREE.Group();
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.53, 40), ringMat);
+  const ping = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.5, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+  for (const r of [ring, ping]) { r.rotation.x = -Math.PI / 2; wellMarker.add(r); }
+  wellMarker.userData = { ring, ping };
+  wellMarker.visible = false;
+  card.add(wellMarker);
   card.name = 'card';
   card.visible = false;
   craft.add(card);
@@ -1148,7 +1160,7 @@ function setCardOut(out, dur = 900) {
     card.position.y = lerp(y0, y1, k);
     card.rotation.x = lerp(r0, r1, k);
     cardLeader.material.opacity = (out ? k : 1 - k) * 0.7;
-  }, done: () => { if (!out) card.visible = false; } });
+  }, done: () => { if (!out) { card.visible = false; if (wellMarker) wellMarker.visible = false; } } });
 }
 /** Light the well a beacon reported, in the colour its TAOS sensor saw. */
 function lightWell(n, rgb) {
@@ -1156,12 +1168,16 @@ function lightWell(n, rgb) {
   const w = wells[n];
   if (!w) return;
   if (rgb) w.mat.emissive.setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
-  w.target = 2.2;
-  const p = new THREE.Vector3(); w.mesh.getWorldPosition(p);
-  wellLight.position.copy(p).add(new THREE.Vector3(0, 2.2, 0));
-  wellLight.color.copy(w.mat.emissive);
-  wellLight.userData.target = 18;
-  setTimeout(() => { if (w.target === 2.2) { w.target = 0.9; wellLight.userData.target = 6; } }, 1800);
+  // Peak glow stays under the bloom threshold, then settles; the ring does the pointing.
+  w.target = 0.95;
+  setTimeout(() => { if (w.target === 0.95) w.target = 0.7; }, 1800);
+  const { ring, ping } = wellMarker.userData;
+  wellMarker.position.set(w.mesh.position.x, 0.47, w.mesh.position.z);
+  wellMarker.visible = true;
+  ring.material.opacity = 0.95;
+  if (!reducedMotion) {
+    tween({ dur: 900, ease: Ease.outCubic, update: k => { ping.scale.setScalar(1 + k * 1.8); ping.material.opacity = 0.8 * (1 - k); } });
+  }
 }
 
 /* =====================================================================
@@ -1935,7 +1951,7 @@ async function deploy() {
   const antennas = [craft.getObjectByName('uhf'), satModel.getObjectByName('uhf')];
   if (reducedMotion) {
     station.visible = false; deployedSat = true;
-    antennas.forEach(a => { a.scale.y = 1; });
+    antennas.forEach(a => { a.rotation.y = Math.PI / 2; });
     for (let k = 1; k <= 4; k++) { solarMats[k].userData.base = 0; solarMats[k].emissiveIntensity = 0; }
     flyCraft('craft', 1);
     await firstBeacon();
@@ -1956,8 +1972,12 @@ async function deploy() {
   flyCraft('craft', 5000);
   await sleep(1200);
   hideCaption();
-  // the UHF whip springs out once EcAMSat is free
-  tween({ dur: 900, ease: Ease.outBack, update: k => antennas.forEach(a => { a.scale.y = 0.01 + 0.99 * k; }) });
+  // free of the rails, the folded whip springs out and rings to a stop
+  sound.twang();
+  tween({ dur: 1600, ease: Ease.linear, update: k => {
+    const swing = 1 - Math.exp(-5.5 * k) * Math.cos(13 * k);
+    antennas.forEach(a => { a.rotation.y = (Math.PI / 2) * swing; });
+  } });
   await sleep(900);
   caption('Panels in sunlight', 'solar current climbs from 112 to 484 mA in the first in-orbit minutes');
   sound.wake();
@@ -2035,7 +2055,6 @@ function frame(now) {
     w.level += (w.target - w.level) * (1 - Math.exp(-rate * dt));
     w.mat.emissiveIntensity = w.level;
   }
-  wellLight.intensity += ((wellLight.userData.target || 0) - wellLight.intensity) * (1 - Math.exp(-4 * dt));
   if (backdrop) backdrop.rotation.x += dt * 0.0035;
 
   // orbit simulation runs whenever the spacecraft is flying
