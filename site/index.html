@@ -1,0 +1,2142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EcAMSat — Beacon Decoder in Orbit</title>
+<meta name="description" content="An interactive 3D tribute to NASA's EcAMSat, the first 6U CubeSat: watch it leave the space station, hear its real beacon packets, decode them byte by byte, and replay its 2017 telemetry. Built around a Python decoder written on deployment day.">
+<meta name="theme-color" content="#05070b">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='18' width='52' height='28' rx='3' fill='%230b1430' stroke='%23d4a94f' stroke-width='4'/%3E%3Cpath d='M32 18v28' stroke='%23d4a94f' stroke-width='3'/%3E%3Ccircle cx='52' cy='12' r='4' fill='%237fe3ff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@300;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #05070b;
+    --panel: rgba(9, 13, 21, 0.86);
+    --panel-solid: #0a0f18;
+    --line: rgba(212, 169, 79, 0.2);
+    --line-strong: rgba(212, 169, 79, 0.48);
+    --gold: #d4a94f;
+    --gold-hi: #f0cd7a;
+    --copper: #c27a4e;
+    --beacon: #7fe3ff;
+    --text: #e3e8f0;
+    --muted: #8b95a7;
+    --warn: #ff6b5a;
+    --ok: #7be0a0;
+    --field: #0f1622;
+    --ui: "Barlow", system-ui, sans-serif;
+    --cond: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    /* field colours on the decoder tape */
+    --f-header: #8b95a7; --f-busTime: #f0cd7a; --f-solarI: #ff9d5c; --f-solarT: #e0784a;
+    --f-health0: #c9a7ff; --f-health1: #b18cff; --f-health2: #9a73f5; --f-health3: #8460e6;
+    --f-page: #5fd4c4; --f-cardTemp: #ff7b7b; --f-well: #f16ab0;
+    --f-taosR: #ff5d5d; --f-taosG: #6fe08a; --f-taosB: #6aa8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--void); color: var(--text); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse 80% 75% at 50% 45%, transparent 55%, rgba(0,0,0,0.6) 100%); }
+  #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .24s ease; z-index: 2; }
+  #fade.on { opacity: 1; }
+
+  /* ---------- top bar ---------- */
+  .topbar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 16px; padding: 14px 18px; padding-top: max(14px, env(safe-area-inset-top));
+    background: linear-gradient(to bottom, rgba(5,7,11,0.88), rgba(5,7,11,0)); pointer-events: none; z-index: 5; }
+  .topbar > * { pointer-events: auto; }
+  .brand { display: flex; flex-direction: column; line-height: 1; margin-right: auto; user-select: none; }
+  .brand .mark { font-family: var(--cond); font-weight: 500; font-size: 27px; letter-spacing: 0.16em; color: var(--gold-hi); }
+  .brand .sub { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 5px; }
+  .views { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: rgba(9,13,21,0.7); backdrop-filter: blur(8px); overflow-x: auto; scrollbar-width: none; }
+  .views::-webkit-scrollbar { display: none; }
+  .views button, .tools button { appearance: none; border: 0; background: transparent; cursor: pointer; }
+  .views button { padding: 7px 14px; border-radius: 999px; font-family: var(--cond); font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; transition: color .2s, background .2s; }
+  .views button:hover { color: var(--text); }
+  .views button.active { background: rgba(212,169,79,0.16); color: var(--gold-hi); }
+  .tools { display: flex; gap: 6px; }
+  .tools button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: rgba(9,13,21,0.7); backdrop-filter: blur(8px); display: grid; place-items: center; color: var(--text); transition: border-color .2s, color .2s, background .2s; }
+  .tools button:hover { border-color: var(--line-strong); color: var(--gold-hi); }
+  .tools button.on { background: rgba(212,169,79,0.18); border-color: var(--line-strong); color: var(--gold-hi); }
+  .tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* ---------- side panel ---------- */
+  .panel { position: fixed; top: 74px; right: 14px; bottom: 168px; width: 360px; z-index: 6; overflow-y: auto; padding: 18px 18px 22px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(12px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5); transform: translateX(calc(100% + 30px)); transition: transform .45s cubic-bezier(.2,.8,.2,1); scrollbar-width: thin; scrollbar-color: #26324a transparent; }
+  .panel.open { transform: none; }
+  .panel h2, .panel h3 { font-family: var(--cond); font-weight: 500; letter-spacing: 0.06em; color: var(--gold-hi); margin: 0 0 8px; }
+  .panel h2 { font-size: 24px; }
+  .panel h3 { font-size: 19px; }
+  .panel .lede { font-size: 13px; color: var(--muted); margin: 0 0 14px; line-height: 1.45; }
+  .panel section { padding: 16px 0; border-top: 1px solid var(--line); }
+  .panel section:first-of-type { border-top: 0; padding-top: 2px; }
+  .lbl { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .lbl b { color: var(--text); font-weight: 500; }
+  select, textarea { width: 100%; background: var(--field); border: 1px solid #26324a; border-radius: 7px; padding: 7px 8px; font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+  textarea { resize: none; height: 58px; line-height: 1.45; word-break: break-all; }
+  textarea.bad { border-color: var(--warn); }
+  select { cursor: pointer; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row.space { justify-content: space-between; }
+  .btn { appearance: none; border: 1px solid var(--line-strong); background: rgba(212,169,79,0.1); color: var(--gold-hi); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; letter-spacing: 0.04em; transition: background .2s, border-color .2s; }
+  .btn:hover { background: rgba(212,169,79,0.2); }
+  .btn.ghost { background: transparent; border-color: #26324a; color: var(--text); }
+  .btn.ghost:hover { border-color: #3a4a68; }
+  .btn[disabled] { opacity: 0.45; cursor: default; }
+  .hintline { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.4; }
+  .counter { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .counter.ok { color: var(--ok); }
+  .counter.bad { color: var(--warn); }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; line-height: 1.35; }
+  .check input { accent-color: var(--gold); margin-top: 2px; }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+  .mt { margin-top: 12px; }
+
+  /* signal path */
+  .steps { display: grid; gap: 2px; font-family: var(--mono); font-size: 11.5px; }
+  .step { display: grid; grid-template-columns: 82px 1fr; gap: 8px; padding: 3px 6px; border-radius: 5px; color: var(--muted); transition: background .25s, color .25s; }
+  .step .k { font-family: var(--cond); font-size: 12.5px; letter-spacing: 0.06em; color: var(--c, var(--muted)); }
+  .step .v { overflow-wrap: anywhere; line-height: 1.45; }
+  .step.lit { background: rgba(255,255,255,0.05); color: var(--text); }
+  .step .arrow { color: var(--muted); }
+  .step .out { color: var(--text); }
+  .typeline { margin-top: 8px; font-size: 12.5px; color: var(--text); line-height: 1.5; min-height: 1.5em; }
+  .typeline b { color: var(--gold-hi); font-weight: 500; }
+
+  /* readouts */
+  .readout { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ro { background: rgba(255,255,255,0.03); border: 1px solid #1c2638; border-radius: 8px; padding: 7px 9px; min-width: 0; }
+  .ro .t { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ro .n { font-family: var(--mono); font-size: 15px; margin-top: 2px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ro .n small { font-size: 11px; color: var(--muted); }
+  .ro.wide { grid-column: span 2; }
+  .ro.warn { border-color: rgba(255,107,90,0.6); }
+  .ro.warn .n { color: var(--warn); }
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; box-shadow: 0 0 10px currentColor; }
+  .warnings { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--warn); line-height: 1.45; }
+  .warnings li::before { content: "⚠ "; }
+
+  /* receiver */
+  #waterfall { width: 100%; height: 110px; display: block; border-radius: 8px; background: #160f2a; border: 1px solid #1c2638; image-rendering: pixelated; }
+  .wf-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .log { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 3px; }
+  .log li button { width: 100%; text-align: left; appearance: none; border: 1px solid #1c2638; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 5px 8px; cursor: pointer; display: grid; grid-template-columns: 62px 1fr; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .log li button:hover { border-color: #3a4a68; color: var(--text); }
+  .log li b { color: var(--beacon); font-weight: 500; }
+
+  /* telemetry bars */
+  .bars { display: grid; gap: 5px; }
+  .bar { display: grid; grid-template-columns: 74px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; }
+  .bar .name { color: var(--muted); font-family: var(--cond); letter-spacing: 0.06em; font-size: 13px; }
+  .bar .track { height: 7px; border-radius: 4px; background: #121a28; overflow: hidden; }
+  .bar .fill { height: 100%; width: 0; border-radius: 4px; background: var(--c, var(--gold)); transition: width .18s linear; }
+  .bar .val { font-family: var(--mono); font-size: 11.5px; text-align: right; color: var(--text); }
+  .temps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .temp { border-radius: 6px; padding: 6px 4px; text-align: center; font-family: var(--mono); font-size: 11.5px; background: #121a28; border: 1px solid #1c2638; }
+  .temp small { display: block; font-family: var(--cond); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+  #spark { width: 100%; height: 70px; display: block; margin-top: 10px; }
+
+  /* ---------- bottom: decoder tape ---------- */
+  .tape { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(980px, calc(100% - 32px)); z-index: 4;
+    background: linear-gradient(180deg, rgba(10,15,24,0.94), rgba(7,10,17,0.94)); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 12px; box-shadow: 0 14px 40px rgba(0,0,0,0.55);
+    display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; transition: opacity .3s, transform .3s; }
+  .tape.hidden, .timeline.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, 16px); }
+  .tape-meta { grid-column: 1 / -1; display: flex; gap: 14px; align-items: baseline; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+  .tape-meta b { color: var(--beacon); font-weight: 500; }
+  .tape-meta .status { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tape-meta .status.ok { color: var(--ok); }
+  .tape-meta .status.bad { color: var(--warn); }
+  .tape-text { font-family: var(--mono); font-size: 17px; letter-spacing: 0.06em; white-space: nowrap; overflow-x: auto; overflow-y: hidden; min-height: 1.7em; padding-bottom: 6px; scrollbar-width: none; }
+  .tape-text::-webkit-scrollbar { display: none; }
+  .tape-text .ph { color: rgba(227,232,240,0.35); font-family: var(--ui); letter-spacing: 0.02em; font-size: 14px; }
+  .fld { display: inline-flex; position: relative; border-bottom: 2px solid transparent; transition: border-color .25s, color .25s, background .25s; padding-bottom: 1px; }
+  .fld.on { border-bottom-color: var(--c); color: var(--c); }
+  .fld.hot { background: color-mix(in srgb, var(--c) 18%, transparent); }
+  .fld .byte { display: inline-flex; transition: transform .32s cubic-bezier(.5,0,.3,1.3); }
+  .fld .ch { white-space: pre; }
+  .fld .ch.pending { opacity: 0; }
+  .fld + .fld { margin-left: 0.32em; }
+  .tape.glitch .tape-text { animation: glitch .38s steps(2) 3; }
+  @keyframes glitch { 0% { transform: translate(0); text-shadow: 2px 0 #ff3b6b, -2px 0 #3bf0ff; } 33% { transform: translate(-2px, 1px); text-shadow: -3px 0 #ff3b6b, 3px 0 #3bf0ff; } 66% { transform: translate(2px, -1px); text-shadow: 1px 0 #ff3b6b, -1px 0 #3bf0ff; } 100% { transform: translate(0); text-shadow: none; } }
+  .tape-actions { display: flex; gap: 4px; }
+  .tape-actions button { appearance: none; border: 1px solid var(--line); background: rgba(212,169,79,0.06); border-radius: 8px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; color: var(--gold-hi); }
+  .tape-actions button:hover { background: rgba(212,169,79,0.16); }
+  .tape-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- bottom: telemetry timeline ---------- */
+  .timeline { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(980px, calc(100% - 32px)); z-index: 4;
+    background: linear-gradient(180deg, rgba(10,15,24,0.94), rgba(7,10,17,0.94)); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 12px; box-shadow: 0 14px 40px rgba(0,0,0,0.55); transition: opacity .3s, transform .3s; }
+  .tl-top { display: flex; gap: 12px; align-items: center; }
+  .tl-top .btn { padding: 6px 10px; min-width: 44px; }
+  .tl-read { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 0; }
+  .tl-read b { color: var(--text); font-weight: 500; }
+  .tl-read .sun { color: var(--gold-hi); }
+  .tl-read .ecl { color: #8fa8ff; }
+  #tlCanvas { width: 100%; height: 54px; display: block; margin-top: 8px; cursor: pointer; }
+  #scrub { margin-top: 2px; }
+
+  .hint { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.06em; color: var(--muted); text-align: center; pointer-events: none; transition: opacity 1s; z-index: 3; width: calc(100% - 32px); text-shadow: 0 1px 6px #000; }
+  .hint kbd { font-family: var(--mono); border: 1px solid #33415c; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--text); font-size: 11px; }
+  .hint.hide { opacity: 0; }
+  .toast { position: fixed; top: 76px; left: 50%; transform: translate(-50%, -12px); opacity: 0; background: var(--panel-solid); border: 1px solid var(--line-strong); color: var(--text); padding: 10px 16px; border-radius: 10px; font-size: 13.5px; transition: opacity .3s, transform .3s; pointer-events: none; z-index: 20; max-width: calc(100% - 32px); text-align: center; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast b { color: var(--beacon); font-weight: 500; }
+  .clock { position: fixed; left: 18px; top: 82px; z-index: 3; font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.6; pointer-events: none; text-shadow: 0 1px 6px #000; transition: opacity .4s; }
+  .clock b { color: var(--text); font-weight: 500; }
+  .clock .live { color: var(--beacon); }
+  .clock.hidden { opacity: 0; }
+
+  /* ---------- intro ---------- */
+  #intro { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px;
+    background: radial-gradient(ellipse at 50% 55%, rgba(5,7,11,0.45), rgba(2,3,6,0.96) 70%); transition: opacity 1.4s ease, visibility 1.4s; }
+  #intro.gone { opacity: 0; visibility: hidden; }
+  .intro-card { text-align: center; max-width: 620px; }
+  .intro-kicker { font-size: 11px; letter-spacing: 0.36em; text-transform: uppercase; color: var(--muted); }
+  .intro-title { font-family: var(--cond); font-weight: 300; font-size: clamp(60px, 14vw, 128px); letter-spacing: 0.12em; margin: 12px 0 4px; padding-left: 0.12em; color: var(--gold-hi); text-shadow: 0 0 40px rgba(212,169,79,0.25); }
+  .intro-sub { font-size: 18px; color: var(--text); margin: 0 0 30px; line-height: 1.5; font-weight: 400; }
+  .intro-sub em { color: var(--gold-hi); font-style: normal; }
+  .power { appearance: none; border: 1px solid var(--line-strong); background: rgba(212,169,79,0.08); color: var(--gold-hi); padding: 14px 30px; border-radius: 999px; font-family: var(--cond); font-size: 15px; letter-spacing: 0.26em; text-transform: uppercase; cursor: pointer; transition: background .3s, box-shadow .3s; display: inline-flex; gap: 12px; align-items: center; }
+  .power:hover:not([disabled]) { background: rgba(212,169,79,0.18); box-shadow: 0 0 30px rgba(127,227,255,0.18); }
+  .power[disabled] { opacity: 0.5; cursor: wait; }
+  .power .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--beacon); box-shadow: 0 0 12px var(--beacon); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .intro-note { margin-top: 22px; font-size: 12px; color: var(--muted); letter-spacing: 0.05em; line-height: 1.6; }
+  .caption { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 3; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.2s; text-shadow: 0 2px 12px #000; width: calc(100% - 32px); }
+  .caption.show { opacity: 1; }
+  .caption .d { font-family: var(--cond); font-size: clamp(28px, 5vw, 44px); letter-spacing: 0.14em; color: var(--text); font-weight: 300; }
+  .caption .s { font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+
+  /* ---------- about ---------- */
+  dialog { border: 1px solid var(--line-strong); background: var(--panel-solid); color: var(--text); border-radius: 14px; padding: 0; width: min(680px, calc(100% - 32px)); max-height: calc(100% - 48px); box-shadow: 0 30px 90px rgba(0,0,0,0.7); }
+  dialog::backdrop { background: rgba(2,3,6,0.72); backdrop-filter: blur(3px); }
+  .about { padding: 28px 30px 26px; overflow-y: auto; }
+  .about h2 { font-family: var(--cond); font-weight: 500; font-size: 34px; margin: 0; color: var(--gold-hi); letter-spacing: 0.04em; }
+  .about h3 { font-family: var(--cond); font-weight: 500; font-size: 20px; margin: 22px 0 4px; color: var(--gold-hi); letter-spacing: 0.04em; }
+  .about .kicker { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); }
+  .about p, .about li { font-size: 14.5px; line-height: 1.6; color: #cfd6e2; }
+  .about ul { padding-left: 18px; }
+  .about a { color: var(--beacon); }
+  .about code, .term { font-family: var(--mono); }
+  .about code { font-size: 13px; color: var(--gold-hi); }
+  .term { background: #04060a; border: 1px solid #1c2638; border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #a8e6b0; white-space: pre-wrap; word-break: break-all; }
+  .term .p { color: #6f7a8c; }
+  .term .c { color: #e3c06a; }
+  .about .close { float: right; }
+  .about .src { font-size: 12.5px; color: var(--muted); }
+  .about .src li { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  @media (max-width: 760px) {
+    .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
+    .brand .mark { font-size: 21px; }
+    .brand .sub { display: none; }
+    .views { order: 3; width: 100%; justify-content: space-between; }
+    .views button { padding: 7px 8px; font-size: 13px; letter-spacing: 0.06em; flex: 1; }
+    .tools button { width: 36px; height: 36px; }
+    .panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 72vh; transform: translateY(calc(100% + 20px)); z-index: 8; }
+    .tape, .timeline { padding: 8px 10px 10px; bottom: max(10px, env(safe-area-inset-bottom)); }
+    .tape-text { font-size: 14px; }
+    .tape-meta { font-size: 9.5px; letter-spacing: 0.1em; gap: 10px; }
+    .tape-actions { flex-direction: column; }
+    .tape-actions button { width: 32px; height: 28px; }
+    .hint { bottom: 140px; font-size: 11px; }
+    .toast { top: 112px; }
+    .clock { top: 116px; left: 12px; font-size: 10.5px; }
+    .tl-read { gap: 10px; font-size: 11px; }
+    .intro-sub br { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .panel, #intro, #fade, .fld .byte, .tape, .timeline { transition: none; }
+    .tape.glitch .tape-text { animation: none; }
+    .power .dot { animation: none; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene" tabindex="0" aria-label="3D view of the EcAMSat spacecraft and its orbit"></canvas>
+<div class="vignette"></div>
+<div id="fade"></div>
+
+<header class="topbar">
+  <div class="brand"><span class="mark">EcAMSat</span><span class="sub">E. coli AntiMicrobial Satellite · NASA Ames · 2017</span></div>
+  <nav class="views" aria-label="Views">
+    <button data-view="orbit">Orbit</button>
+    <button data-view="craft" class="active">Spacecraft</button>
+    <button data-view="card">Decoder</button>
+    <button data-view="telemetry">Telemetry</button>
+  </nav>
+  <div class="tools">
+    <button id="btnSound" title="Sound on / off" aria-label="Toggle sound">
+      <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+    </button>
+    <button id="btnPanel" title="Decoder, receiver &amp; settings" aria-label="Open the decoder panel">
+      <svg viewBox="0 0 24 24"><path d="M4 20 12 4l8 16"/><path d="M7.5 13h9"/><circle cx="12" cy="4" r="1.5"/></svg>
+    </button>
+    <button id="btnAbout" title="About this tribute" aria-label="About">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="clock hidden" id="clock" aria-hidden="true"></div>
+
+<aside id="panel" class="panel" aria-label="Decoder and settings">
+  <section id="secDecoder">
+    <h2>Beacon decoder</h2>
+    <p class="lede">EcAMSat sent a 64-character beacon every 5 seconds on 437.100 MHz. Ham operators around the world copied them and mailed them in. Pick one of the real packets, or paste your own.</p>
+    <label class="lbl" for="pick">Received by</label>
+    <select id="pick" aria-label="Choose a received beacon packet"></select>
+    <label class="lbl mt" for="pkt">Packet <span class="counter" id="count">0/64</span></label>
+    <textarea id="pkt" spellcheck="false" autocomplete="off" aria-describedby="count"></textarea>
+    <div class="row mt">
+      <button class="btn" id="btnDecode">Decode ▸</button>
+      <button class="btn ghost" id="btnNext" title="Load the next ham-received packet">Next packet</button>
+    </div>
+    <label class="lbl mt" for="tempo">Tempo</label>
+    <input type="range" id="tempo" min="0.25" max="2.5" value="0.8" step="0.05" style="direction: rtl" aria-label="Decoding speed">
+  </section>
+  <section>
+    <h3>Signal path</h3>
+    <div class="steps" id="steps"></div>
+    <div class="typeline" id="typeline">Decode a packet to follow each field through the 2017 script's steps.</div>
+  </section>
+  <section>
+    <h3>Readout</h3>
+    <div class="readout" id="readout"><div class="ro wide"><div class="t">Waiting</div><div class="n"><small>No packet decoded yet</small></div></div></div>
+    <ul class="warnings" id="warnings"></ul>
+  </section>
+  <section>
+    <h3>Receiver · 437.100 MHz</h3>
+    <canvas id="waterfall" width="320" height="110" aria-label="Waterfall of the received audio"></canvas>
+    <div class="wf-axis"><span>0</span><span>1200 Hz</span><span>2200 Hz</span><span>3.5 kHz</span></div>
+    <p class="hintline">The beacon was 1200-baud AFSK: two audio tones, 1200 and 2200 Hz. What you hear is synthesised from each packet's actual characters.</p>
+    <ul class="log" id="log"></ul>
+  </section>
+  <section id="secTelemetry">
+    <h3>Telemetry · 2017</h3>
+    <p class="lede">Real bus telemetry downlinked from EcAMSat, one sample a minute. Scrub the timeline below.</p>
+    <div class="bars" id="solarBars"></div>
+    <label class="lbl mt">Temperatures (°C)</label>
+    <div class="temps" id="temps"></div>
+    <div class="bars mt" id="powerBars"></div>
+    <canvas id="spark" width="640" height="140" aria-label="Battery voltage and solar current across the record"></canvas>
+    <p class="hintline">Gold: total solar current. Blue: battery voltage. Each dip is an orbit passing through Earth's shadow.</p>
+  </section>
+  <section>
+    <h3>Orbit</h3>
+    <label class="lbl" for="warp">Time warp <b id="warpVal">60×</b></label>
+    <input type="range" id="warp" min="1" max="400" value="60" step="1">
+    <label class="check mt"><input type="checkbox" id="follow" checked> Follow the spacecraft</label>
+    <p class="hintline">The orbit is representative: ISS-like, 51.6° and about 409 km, not a reconstruction of EcAMSat's actual track.</p>
+  </section>
+  <section>
+    <h3>Preferences</h3>
+    <label class="lbl" for="vol">Volume</label>
+    <input type="range" id="vol" min="0" max="100" value="75">
+    <label class="check mt"><input type="checkbox" id="amb" checked> Ground-station ambience</label>
+  </section>
+</aside>
+
+<div class="hint hide" id="hint">Drag to look around · <kbd>1</kbd>–<kbd>4</kbd> views · <kbd>N</kbd> next packet · <kbd>Enter</kbd> decode</div>
+
+<section class="tape" id="tape" aria-label="Beacon tape">
+  <div class="tape-meta"><span>Station <b id="tapeStation">—</b></span><span id="tapeWhen"></span><span class="status" id="tapeStatus"></span></div>
+  <div id="tapeText" class="tape-text" aria-live="polite"><span class="ph">Waiting for a beacon…</span></div>
+  <div class="tape-actions">
+    <button id="btnTapeDecode" title="Decode this packet" aria-label="Decode this packet"><svg viewBox="0 0 24 24"><path d="M7 5l11 7-11 7z"/></svg></button>
+    <button id="btnTapeNext" title="Next ham packet" aria-label="Load the next packet"><svg viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/></svg></button>
+    <button id="btnCopy" title="Copy packet" aria-label="Copy packet"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>
+  </div>
+</section>
+
+<section class="timeline hidden" id="timeline" aria-label="Telemetry timeline">
+  <div class="tl-top">
+    <button class="btn" id="btnPlay" aria-label="Play telemetry">▶</button>
+    <div class="tl-read" id="tlRead"></div>
+  </div>
+  <canvas id="tlCanvas" width="1900" height="108" aria-hidden="true"></canvas>
+  <input type="range" id="scrub" min="0" max="1" value="0" step="1" aria-label="Telemetry sample">
+</section>
+
+<div class="caption" id="caption"><div class="d" id="capD"></div><div class="s" id="capS"></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<div id="intro">
+  <div class="intro-card">
+    <div class="intro-kicker">NASA Ames · First 6U CubeSat · 2017</div>
+    <div class="intro-title">EcAMSat</div>
+    <p class="intro-sub">On <em>20 November 2017</em> a small spacecraft full of E. coli left the <br>International Space Station. That evening, a little Python script <br>learned to read its beacon.</p>
+    <button class="power" id="btnPower" disabled><span class="dot"></span><span id="powerLabel">Loading Earth…</span></button>
+    <div class="intro-note">Best with sound on. Drag to look around, <kbd style="font-family:var(--mono)">1</kbd>–<kbd style="font-family:var(--mono)">4</kbd> switch views.</div>
+  </div>
+</div>
+
+<dialog id="about">
+  <div class="about">
+    <button class="btn ghost close" id="btnAboutClose" aria-label="Close">Close</button>
+    <div class="kicker">A tribute</div>
+    <h2>beacon.py, 2017</h2>
+    <p>On the evening EcAMSat was deployed, a terminal script went up on GitHub: <code>beacon.py</code>, written in Python 2 from Santa Clara University's public decoding guide. You pasted in a 64-character packet a ham operator had copied, and it printed the spacecraft's health. Here is what it said about the first packet JA0CAW sent in:</p>
+    <div class="term"><span class="p">$</span> python beacon.py
+<span class="p">Please post the entire 64 character beacon packet:</span> EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B
+Bus Time (seconds): 2222621
+Solar Panel 1 current (mA): 7.1456
+Solar Panel 1 temperature (C): 15.9891
+Bus Power Port Status: 0b11110
+Payload board temperature (C): 22.9192
+Battery Voltage (V): 8.042
+Payload Heater Current (mA): 8.04
+Payload Page Number: 68
+Median Card Temperature (C): 22.97
+Well Number: 48
+TaosR (Hz): 13986
+TaosG (Hz): 20833
+TaosB (Hz): 23391</div>
+    <p>Its comments are still the best part:</p>
+    <div class="term"><span class="c">#WARNING: some terminals decode consecutive spaces as a single space
+#Later there will be input validation but for now I'm lazy</span>
+...
+<span class="c">#Convert little endian to big endian... seriously who chose little endian?</span></div>
+    <h3>What 2.0 keeps, and fixes</h3>
+    <ul>
+      <li>The decoder is the same: the same 64-character layout, the same byte swaps and the same calibration constants. <a href="decoder.js">decoder.js</a> is checked against the Python version on all 32 ham-received packets.</li>
+      <li>It finally has the input validation 2017 promised, and it accepts lowercase hex: one JA0CAW packet has an <code>f</code> in it.</li>
+      <li>2017 compared numbers with <code>is</code> (<code>if DataType is 1</code>), which only worked because CPython caches small integers. The endian helper's 2-byte branch returned the built-in <code>bytes</code> type instead of the byte; it was never called with 2, so nobody noticed.</li>
+      <li>New: sanity checks. A JA1GDE packet full of <code>99</code> bytes claims a 388 °C card; the bench flags it as a likely corrupted copy.</li>
+    </ul>
+    <h3>The mission</h3>
+    <p>EcAMSat was built at NASA Ames Research Center with Stanford University School of Medicine (Principal Investigator Dr. A. C. Matin; Project Manager Stevan Spremo), and operated by Santa Clara University's Robotic Systems Lab. It launched on Orbital ATK's OA-8E Antares/Cygnus flight on 12 November 2017, was deployed from the station's Kibo airlock on 20 November, and studied how microgravity changes antibiotic resistance in uropathogenic <i>E. coli</i>. Two strains grew in a fluidic card under four gentamicin doses, read through alamarBlue dye by LEDs and a TAOS light-to-frequency sensor. It was NASA's first 6U CubeSat, and its dimensions became the 6U standard. It re-entered on 8 December 2021.</p>
+    <p>39 ham operators in 14 countries submitted 8,848 beacon packets. This page uses the 32 that JA0CAW, JA1GDE and DK3WN sent in during the first days. Station pins show call areas, not anyone's location.</p>
+    <h3>How this page was made</h3>
+    <p>The spacecraft, the deployer, the fluidic card, the textures and every sound are generated in your browser with three.js and Web Audio. The model follows photos of the flight unit in the lab and NASA's ISS deployment frames: clipped-corner GaAs cells on white PCB, a gold-plated payload half, a copper-taped bus half and the white block around the S-band patch. Which face the beacon calls panel 1, 2, 3 or 4 is a guess. The Earth is NASA's Blue Marble Next Generation and Black Marble 2016 imagery. The telemetry is real bus data downlinked in November and December 2017. Its clock origin (bus time 0 ≈ 25 October 2017) is derived from the data, so dates are good to a few hours.</p>
+    <ul class="src">
+      <li>Spremo, “EcAMSat Spacecraft Mission: The Success Story of NASA's First 6U CubeSat,” 2018 (NTRS 20190001131)</li>
+      <li>Lera, EcAMSat S3VI talk, NASA, 2023 · NASA fact sheets FS-2015-03-05-ARC and FS-2017-10-01-ARC</li>
+      <li>Santa Clara University, EcAMSat beacon decoding guide, 2017</li>
+      <li>Padgen et al., <i>Life Sciences in Space Research</i> 24 (2020) 18–24</li>
+      <li>SatNOGS DB, NORAD 43019 (CC BY-SA) · Earth imagery: NASA Visible Earth / Earth Observatory</li>
+    </ul>
+  </div>
+</dialog>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import {
+  HEADER, FIELDS, TYPE_NAMES, decodeBeacon, validatePacket, sliceFields, plausibilityWarnings,
+  wellPosition, busTimeToDate, BUS_EPOCH_MS, WELL_COUNT, WELLS_PER_ROW, reverseEndian,
+} from './decoder.js';
+
+/* =====================================================================
+   1. SMALL UTILITIES
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const DEG = Math.PI / 180;
+const DAY = 86400;
+const Ease = {
+  linear: t => t,
+  outQuad: t => 1 - (1 - t) * (1 - t),
+  inQuad: t => t * t,
+  outCubic: t => 1 - Math.pow(1 - t, 3),
+  inOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  outBack: t => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+};
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('ecamsat.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('ecamsat.' + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+};
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const tweens = new Set();
+function tween({ dur, ease = Ease.outCubic, update, done, delay = 0 }) {
+  const tw = { t0: performance.now() + delay, dur: Math.max(1, dur), ease, update, done };
+  tweens.add(tw);
+  return tw;
+}
+function runTweens(now) {
+  for (const tw of tweens) {
+    if (now < tw.t0) continue;
+    const k = clamp((now - tw.t0) / tw.dur, 0, 1);
+    tw.update(tw.ease(k));
+    if (k >= 1) { tweens.delete(tw); tw.done && tw.done(); }
+  }
+}
+const tweenP = opts => new Promise(res => tween({ ...opts, done: () => { opts.done && opts.done(); res(); } }));
+
+let toastTimer;
+function toast(html, ms = 3200) {
+  const t = $('#toast'); t.innerHTML = html; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : '—';
+const fmtDate = (d, withTime = true) => d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}), timeZone: 'UTC' }) + (withTime ? ' UTC' : '');
+function fmtBusTime(s) {
+  const d = Math.floor(s / DAY), h = Math.floor(s % DAY / 3600), m = Math.floor(s % 3600 / 60);
+  return `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+}
+
+/* =====================================================================
+   2. DATA — the 32 ham-received packets and the 2017 bus telemetry
+   ===================================================================== */
+let BEACONS = [];   // [{ station, packet }]
+let BUS = null;     // columnar: t[], solar_1i[] ...
+const STATIONS = {
+  // Pins mark call areas, never an operator's location.
+  JA0CAW: { lat: 36.6, lon: 138.2, area: 'JA0 · Shin\'etsu, Japan', anchor: -0.15 },
+  JA1GDE: { lat: 35.9, lon: 139.7, area: 'JA1 · Kantō, Japan', anchor: 1.15 },
+  DK3WN:  { lat: 51.0, lon: 10.4,  area: 'DK · Germany' },
+  SCU:    { lat: 37.349, lon: -121.938, area: 'Santa Clara University · mission operations' },
+};
+async function loadData() {
+  const [b, bus] = await Promise.all([
+    fetch('data/beacons.json').then(r => r.json()),
+    fetch('data/bus.json').then(r => r.json()),
+  ]);
+  BEACONS = b; BUS = bus;
+}
+
+/* =====================================================================
+   3. SOUND — everything synthesised with Web Audio, including real AFSK
+   ===================================================================== */
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.volume = store.get('volume', 0.75);
+    this.muted = store.get('muted', false);
+    this.ambience = store.get('ambience', true);
+  }
+  init() {
+    if (this.ctx) { this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = this.ctx = new AC();
+    this.master = ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : this.volume;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.2;
+    this.master.connect(comp).connect(ctx.destination);
+    this.verb = ctx.createConvolver();
+    this.verb.buffer = this.impulse(2.2, 2.6);
+    const wet = ctx.createGain(); wet.gain.value = 0.26;
+    this.verb.connect(wet).connect(this.master);
+    this.fx = ctx.createGain();
+    this.fx.connect(this.master); this.fx.connect(this.verb);
+    // The receiver: beacons and hiss pass through here, and the waterfall listens to it.
+    this.radio = ctx.createGain();
+    this.radio.connect(this.master);
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 2048; this.analyser.smoothingTimeConstant = 0.2;
+    this.radio.connect(this.analyser);
+    this.amb = ctx.createGain();
+    this.amb.gain.value = this.ambience ? 1 : 0;
+    this.amb.connect(this.master);
+    const len = ctx.sampleRate * 2;
+    this.white = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = this.white.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.startAmbience();
+  }
+  get now() { return this.ctx.currentTime; }
+  ok() { return this.ctx && this.ctx.state === 'running'; }
+  impulse(seconds, decay) {
+    const ctx = this.ctx, len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay) * (i < 300 ? i / 300 : 1);
+    }
+    return buf;
+  }
+  noise({ t = this.now, dur = 0.05, type = 'bandpass', freq = 2000, q = 1, gain = 0.3, attack = 0.001, out = this.fx, sweep }) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource(); src.buffer = this.white;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(out);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + dur + 0.05);
+  }
+  tone({ t = this.now, freq = 440, freqEnd, dur = 0.1, gain = 0.2, type = 'sine', attack = 0.002, out = this.fx }) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(out);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  /**
+   * Bell 202 AFSK, as EcAMSat's beacon sent it: 1200 baud, mark 1200 Hz, space 2200 Hz,
+   * NRZI (a 0 bit flips the tone), LSB first, with HDLC flags and bit stuffing.
+   * The payload is the packet's real characters; the AX.25 address header is omitted.
+   */
+  afskBuffer(packet) {
+    const ctx = this.ctx, sr = ctx.sampleRate, baud = 1200;
+    const bits = [];
+    const pushByte = (byte, stuff, st) => {
+      for (let b = 0; b < 8; b++) {
+        const bit = (byte >> b) & 1;
+        bits.push(bit);
+        if (!stuff) continue;
+        if (bit) { if (++st.ones === 5) { bits.push(0); st.ones = 0; } } else st.ones = 0;
+      }
+    };
+    const st = { ones: 0 };
+    for (let i = 0; i < 18; i++) pushByte(0x7E, false, st);
+    for (const ch of packet) pushByte(ch.charCodeAt(0) & 0x7F, true, st);
+    for (let i = 0; i < 3; i++) pushByte(0x7E, false, st);
+    const n = Math.ceil(bits.length * sr / baud);
+    const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+    let tone = 1200, phase = 0, bitIdx = -1;
+    for (let i = 0; i < n; i++) {
+      const bi = Math.floor(i * baud / sr);
+      if (bi !== bitIdx) { bitIdx = bi; if (bits[bi] === 0) tone = tone === 1200 ? 2200 : 1200; }
+      phase += 2 * Math.PI * tone / sr;
+      d[i] = Math.sin(phase) * 0.42;
+    }
+    return buf;
+  }
+  /** Play one beacon: squelch opens, the packet chirps, squelch tail. Returns its duration (s). */
+  beacon(packet, { gain = 1 } = {}) {
+    if (!this.ok()) return 0;
+    const ctx = this.ctx, t = this.now + 0.05;
+    const buf = this.afskBuffer(packet);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.5;
+    const g = ctx.createGain(); g.gain.value = 0.32 * gain;
+    src.connect(bp).connect(g).connect(this.radio);
+    this.noise({ t, dur: 0.16, freq: 1700, q: 0.4, gain: 0.07 * gain, out: this.radio });
+    src.start(t + 0.1);
+    const end = t + 0.1 + buf.duration;
+    this.noise({ t: end, dur: 0.18, freq: 2200, q: 0.4, gain: 0.08 * gain, out: this.radio });
+    this.tone({ t: end + 0.02, freq: 1900, freqEnd: 1500, dur: 0.06, gain: 0.015 * gain, out: this.radio });
+    return buf.duration + 0.3;
+  }
+  select() { if (this.ok()) this.tone({ freq: 1900, dur: 0.06, gain: 0.035, type: 'triangle' }); }
+  tick() { if (this.ok()) this.noise({ dur: 0.012, freq: 5200 + Math.random() * 900, q: 6, gain: 0.07 }); }
+  swap() {
+    if (!this.ok()) return; const t = this.now;
+    this.noise({ t, dur: 0.05, freq: 2400, q: 2, gain: 0.18 });
+    this.tone({ t, freq: 1300, freqEnd: 820, dur: 0.09, gain: 0.05, type: 'triangle' });
+    this.noise({ t: t + 0.18, dur: 0.03, freq: 3600, q: 4, gain: 0.16 });
+  }
+  count() { if (this.ok()) this.tone({ freq: 2600 + Math.random() * 300, dur: 0.025, gain: 0.012, type: 'square' }); }
+  chime(base = 880) {
+    if (!this.ok()) return; const t = this.now;
+    this.tone({ t, freq: base, dur: 0.5, gain: 0.05 });
+    this.tone({ t: t + 0.07, freq: base * 1.5, dur: 0.6, gain: 0.04 });
+  }
+  well() {
+    if (!this.ok()) return; const t = this.now;
+    [1568, 2349, 3136].forEach((f, i) => this.tone({ t: t + i * 0.03, freq: f, dur: 1.4 - i * 0.3, gain: 0.045 - i * 0.01 }));
+  }
+  glitch() {
+    if (!this.ok()) return; const t = this.now;
+    for (let i = 0; i < 7; i++) this.noise({ t: t + i * 0.045, dur: 0.035, freq: 800 + Math.random() * 5000, q: 0.7, gain: 0.22 });
+    this.tone({ t, freq: 70, dur: 0.35, gain: 0.12, type: 'square' });
+  }
+  whoosh() { if (this.ok()) this.noise({ dur: 0.55, type: 'lowpass', freq: 300, sweep: 2200, q: 0.8, gain: 0.07, attack: 0.18 }); }
+  servo() {
+    if (!this.ok()) return; const ctx = this.ctx, t = this.now;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(140, t); o.frequency.linearRampToValueAtTime(240, t + 0.5); o.frequency.linearRampToValueAtTime(180, t + 0.85);
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.05, t + 0.08); g.gain.setValueAtTime(0.05, t + 0.75); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(f).connect(g).connect(this.fx); o.start(t); o.stop(t + 1);
+    this.noise({ t: t + 0.88, dur: 0.08, freq: 1500, q: 3, gain: 0.2 });
+  }
+  spring() {
+    if (!this.ok()) return; const t = this.now;
+    this.noise({ t, dur: 0.06, freq: 1800, q: 1.2, gain: 0.5 });
+    this.tone({ t, freq: 120, freqEnd: 42, dur: 0.35, gain: 0.6 });
+    this.tone({ t: t + 0.01, freq: 620, freqEnd: 380, dur: 0.7, gain: 0.07, type: 'triangle' });
+    this.noise({ t: t + 0.02, dur: 1.2, freq: 900, sweep: 300, q: 6, gain: 0.05 });
+  }
+  wake() {
+    if (!this.ok()) return; const t = this.now;
+    [392, 587, 784, 1175].forEach((f, i) => this.tone({ t: t + i * 0.22, freq: f, freqEnd: f * 1.01, dur: 2.4, gain: 0.04, attack: 0.6 }));
+  }
+  startAmbience() {
+    const ctx = this.ctx;
+    // Control room: filtered brown noise, a fan, faint mains hum.
+    const len = ctx.sampleRate * 4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
+    const g = ctx.createGain(); g.gain.value = 0.07;
+    src.connect(lp).connect(g).connect(this.amb); src.start();
+    const hum = ctx.createOscillator(); hum.frequency.value = 60;
+    const hg = ctx.createGain(); hg.gain.value = 0.003;
+    hum.connect(hg).connect(this.amb); hum.start();
+    // Receiver hiss: opens when the spacecraft is above a station's horizon.
+    const hiss = ctx.createBufferSource(); hiss.buffer = this.white; hiss.loop = true;
+    const hbp = ctx.createBiquadFilter(); hbp.type = 'bandpass'; hbp.frequency.value = 1800; hbp.Q.value = 0.35;
+    this.hissGain = ctx.createGain(); this.hissGain.gain.value = 0;
+    hiss.connect(hbp).connect(this.hissGain).connect(this.radio); hiss.start();
+  }
+  setHiss(level) { if (this.hissGain) this.hissGain.gain.setTargetAtTime(this.ambience ? level * 0.022 : 0, this.now, 0.25); }
+  setVolume(v) { this.volume = v; store.set('volume', v); if (this.master && !this.muted) this.master.gain.setTargetAtTime(v, this.now, 0.05); }
+  setMuted(m) { this.muted = m; store.set('muted', m); if (this.master) this.master.gain.setTargetAtTime(m ? 0 : this.volume, this.now, 0.05); }
+  setAmbience(on) { this.ambience = on; store.set('ambience', on); if (this.amb) this.amb.gain.setTargetAtTime(on ? 1 : 0, this.now, 0.3); }
+}
+const sound = new SoundEngine();
+
+/* =====================================================================
+   4. RENDERER, TWO SCENES, CAMERAS, LIGHTS
+   The spacecraft (centimetres) and the Earth (100 units = one Earth radius)
+   live in separate scenes; switching between them fades through black.
+   ===================================================================== */
+const canvas = $('#scene');
+const isSmall = matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, isSmall ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+
+const craftScene = new THREE.Scene();
+const orbitScene = new THREE.Scene();
+craftScene.background = new THREE.Color(0x020306);
+orbitScene.background = new THREE.Color(0x020306);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+/** Space for reflections: black sky, a hard sun, and a broad blue-white Earth below. */
+function spaceEnvironment() {
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.004, 0.005, 0.009), side: THREE.BackSide })));
+  const panel = (w, h, rgb, pos) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(...rgb), side: THREE.DoubleSide }));
+    m.position.copy(pos); m.lookAt(0, 0, 0); env.add(m);
+  };
+  panel(5, 5, [5, 4.6, 4], SUN_CRAFT.clone().multiplyScalar(40));
+  panel(90, 30, [0.55, 0.7, 0.95], new THREE.Vector3(0, -30, -12));
+  panel(40, 12, [0.18, 0.24, 0.34], new THREE.Vector3(0, -22, 30));
+  return env;
+}
+const SUN_CRAFT = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
+craftScene.environment = pmrem.fromScene(spaceEnvironment(), 0.02).texture;
+craftScene.environmentIntensity = 0.9;
+
+const craftCam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.5, 15000);
+const orbitCam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 1, 20000);
+
+const CRAFT_VIEWS = {
+  intro:     { pos: new THREE.Vector3(58, 16, 46),  target: new THREE.Vector3(-2, 0, 0) },
+  craft:     { pos: new THREE.Vector3(60, 28, 62),  target: new THREE.Vector3(0, 0, 0) },
+  card:      { pos: new THREE.Vector3(3, 24, 44),   target: new THREE.Vector3(0, 15.5, 0) },
+  telemetry: { pos: new THREE.Vector3(-64, 30, 58), target: new THREE.Vector3(0, 1, 0) },
+};
+let viewScale = 1;
+function fitCamera() {
+  const a = innerWidth / innerHeight, base = Math.tan(THREE.MathUtils.degToRad(17.5));
+  const need = Math.max(1, 1.6 / a);
+  viewScale = clamp(Math.sqrt(need), 1, 1.8);
+  const t = Math.max(base, base * need / viewScale);
+  for (const cam of [craftCam, orbitCam]) {
+    cam.fov = Math.min(76, THREE.MathUtils.radToDeg(2 * Math.atan(t)));
+    cam.aspect = a; cam.updateProjectionMatrix();
+  }
+}
+const viewPos = v => v.pos.clone().sub(v.target).multiplyScalar(viewScale).add(v.target);
+fitCamera();
+
+// Craft scene lighting: hard sunlight, blue earthshine from below, a whisper of fill.
+const sunLight = new THREE.DirectionalLight(0xfff3e2, 2.7);
+sunLight.position.copy(SUN_CRAFT).multiplyScalar(120);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(isSmall ? 1024 : 2048, isSmall ? 1024 : 2048);
+Object.assign(sunLight.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 40, far: 260 });
+sunLight.shadow.bias = -0.0005; sunLight.shadow.normalBias = 0.04;
+craftScene.add(sunLight);
+const earthShine = new THREE.DirectionalLight(0x8fb4ff, 0.75);
+earthShine.position.set(0, -100, -25);
+craftScene.add(earthShine, new THREE.AmbientLight(0x404a60, 0.18));
+const wellLight = new THREE.PointLight(0xff60b0, 0, 26, 2);
+craftScene.add(wellLight);
+
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(craftScene, craftCam);
+composer.addPass(renderPass);
+// A sun glint on mirror-smooth coverglass can overflow the half-float buffer; one
+// Inf or NaN pixel would spread through the bloom blur and black out the frame.
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() { vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 10.0), c.a); }`,
+}));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 1.25);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+const craftControls = new OrbitControls(craftCam, canvas);
+Object.assign(craftControls, { enableDamping: true, dampingFactor: 0.07, minDistance: 22, maxDistance: 260, rotateSpeed: 0.7, enabled: false });
+craftControls.target.copy(CRAFT_VIEWS.intro.target);
+craftCam.position.copy(viewPos(CRAFT_VIEWS.intro));
+const orbitControls = new OrbitControls(orbitCam, canvas);
+Object.assign(orbitControls, { enableDamping: true, dampingFactor: 0.06, minDistance: 150, maxDistance: 900, rotateSpeed: 0.55, enabled: false, enablePan: false });
+
+/* =====================================================================
+   5. PROCEDURAL TEXTURES
+   ===================================================================== */
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function canvasTex(w, h, draw, { srgb = true } = {}) {
+  const c = makeCanvas(w, h); draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = MAX_ANISO;
+  return t;
+}
+function roundRectPath(g, x, y, w, h, r) {
+  g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.lineTo(x + w, y + r); g.lineTo(x + w, y + h - r); g.lineTo(x + w - r, y + h); g.lineTo(x + r, y + h); g.lineTo(x, y + h - r); g.lineTo(x, y + r); g.closePath();
+}
+/**
+ * One body-mounted solar panel, after the flight unit (lab photos and NASA's ISS
+ * deployment frames iss053e215850 / iss053e216632). GaAs cells about 4 × 7 cm, near
+ * black, each a rectangle with two corners clipped, on a white PCB. Every run of eight
+ * is two strings of four whose clipped edges face each other across the middle.
+ * The large faces carry two such rows either side of a copper-tape strip; the narrow
+ * faces one row. Each half of the spacecraft trims its panel edges in its own finish:
+ * gold on the payload half, copper tape on the bus half.
+ * Returns colour, roughness, metalness, coverglass (clearcoat) and emissive maps.
+ */
+const FINISH = { gold: ['#c99a45', '#e8c376'], copper: ['#b8693f', '#dc946a'] };
+function solarFace({ wCm, hCm, rows, strip = 0, trimTop = 'gold', trimBottom = trimTop, seed = 1, edge = 0.9, end = 1.4 }) {
+  const PX = 40, W = Math.round(wCm * PX), H = Math.round(hCm * PX);
+  const rnd = mulberry32(seed);
+  const gap = 0.22 * PX, mid = 1.0 * PX, E = edge * PX, X0 = end * PX, S = strip * PX;
+  const cw = (W - 2 * X0 - mid - gap * 6) / 8;
+  const rowH = (H - 2 * E - S - (rows > 1 ? 2 * 0.3 * PX : 0.6 * PX)) / rows;
+  const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < 8; c++) {
+    const x = X0 + c * (cw + gap) + (c >= 4 ? mid - gap : 0);
+    const y = rows === 1 ? (H - rowH) / 2 : r === 0 ? E + 0.3 * PX : H - E - 0.3 * PX - rowH;
+    cells.push({ x, y, w: cw, h: rowH, clip: c < 4 ? 'right' : 'left' });
+  }
+  const sy = H / 2 - S / 2;
+  const cellPath = (g, { x, y, w, h, clip }, inset = 0) => {
+    const k = Math.min(w, h) * 0.2;
+    x += inset; y += inset; w -= 2 * inset; h -= 2 * inset;
+    g.beginPath();
+    if (clip === 'right') { g.moveTo(x, y); g.lineTo(x + w - k, y); g.lineTo(x + w, y + k); g.lineTo(x + w, y + h - k); g.lineTo(x + w - k, y + h); g.lineTo(x, y + h); }
+    else { g.moveTo(x + k, y); g.lineTo(x + w, y); g.lineTo(x + w, y + h); g.lineTo(x + k, y + h); g.lineTo(x, y + h - k); g.lineTo(x, y + k); }
+    g.closePath();
+  };
+  // the busbar runs along each cell's clipped edge
+  const bus = c => c.clip === 'right' ? [c.x + c.w - 6, c.y + c.h * 0.2, 3, c.h * 0.6] : [c.x + 3, c.y + c.h * 0.2, 3, c.h * 0.6];
+  const metalBand = (g, y, h, finish) => {
+    const [lo, hi] = FINISH[finish], gr = g.createLinearGradient(0, y, 0, y + h);
+    gr.addColorStop(0, lo); gr.addColorStop(0.5, hi); gr.addColorStop(1, lo);
+    g.fillStyle = gr; g.fillRect(0, y, W, h);
+  };
+  const map = canvasTex(W, H, (g) => {
+    g.fillStyle = '#e2e1dc'; g.fillRect(0, 0, W, H);                       // white PCB
+    for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(120,120,110,${rnd() * 0.05})`; g.fillRect(rnd() * W, rnd() * H, 2, 2); }
+    metalBand(g, 0, E, trimTop); metalBand(g, H - E, E, trimBottom);      // panel edges in each half's finish
+    if (strip) {
+      metalBand(g, sy, S, 'copper');                                        // copper tape strip
+      for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(90,45,25,${rnd() * 0.08})`; g.fillRect(rnd() * W, sy + rnd() * S, 3 + rnd() * 18, 1); }
+      g.fillStyle = 'rgba(60,30,18,0.5)'; g.fillRect(0, sy + S * 0.5 - 1, W, 2);  // tape seam
+      g.fillStyle = '#3d2a20'; for (const fx of [0.33, 0.71]) g.fillRect(W * fx - 10, H / 2 - 10, 20, 20);
+    }
+    g.fillStyle = 'rgba(200,170,90,0.7)';                                   // gold trace across the middle gap
+    g.fillRect(X0 + 4 * (cw + gap) + (mid - gap) / 2 - 2 - gap / 2, E, 4, H - 2 * E);
+    for (const c of cells) {
+      const t = rnd();
+      const gr = g.createLinearGradient(c.x, c.y, c.x + c.w, c.y + c.h);
+      gr.addColorStop(0, `rgb(${13 + t * 5},${13 + t * 4},${20 + t * 8})`);
+      gr.addColorStop(1, `rgb(${6 + t * 3},${6 + t * 3},${11 + t * 5})`);
+      g.fillStyle = gr; cellPath(g, c); g.fill();
+      g.strokeStyle = 'rgba(120,125,140,0.035)'; g.lineWidth = 1;          // grid fingers, barely visible
+      for (let y = c.y + 6; y < c.y + c.h - 4; y += 5) { g.beginPath(); g.moveTo(c.x + 6, y); g.lineTo(c.x + c.w - 6, y); g.stroke(); }
+      g.fillStyle = '#b9bcc4'; g.fillRect(...bus(c));
+    }
+  });
+  const gray = (draw) => canvasTex(W, H, draw, { srgb: false });
+  const rough = gray(g => {
+    g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, W, H);                       // matte solder mask
+    g.fillStyle = '#5a5a5a'; g.fillRect(0, 0, W, E); g.fillRect(0, H - E, W, E); if (strip) g.fillRect(0, sy, W, S);
+    g.fillStyle = '#5a5a5a'; for (const c of cells) { cellPath(g, c); g.fill(); }
+  });
+  const metal = gray(g => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, E); g.fillRect(0, H - E, W, E); if (strip) g.fillRect(0, sy, W, S);
+    g.fillStyle = '#000'; for (const c of cells) { cellPath(g, c); g.fill(); }
+    g.fillStyle = '#fff'; for (const c of cells) g.fillRect(...bus(c));
+  });
+  const glass = gray(g => { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; for (const c of cells) { cellPath(g, c, 1); g.fill(); } });
+  const emissive = canvasTex(W, H, (g) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    for (const c of cells) {
+      const gr = g.createLinearGradient(c.x, c.y, c.x + c.w, c.y + c.h);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#6a6a8a');
+      g.fillStyle = gr; cellPath(g, c, 3); g.fill();
+    }
+  });
+  return { map, rough, metal, glass, emissive };
+}
+/** The white block around the S-band patch antenna, on the gold payload half of the +X end. */
+function patchBlockTex() {
+  return canvasTex(512, 384, (g, w, h) => {
+    g.fillStyle = '#f0efea'; g.fillRect(0, 0, w, h);
+    const rnd = mulberry32(7);
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(90,80,60,${rnd() * 0.05})`; g.fillRect(rnd() * w, rnd() * h, 2, 2); }
+    const s = 170, x = 150, y = 100;                                        // recessed pocket and gold patch
+    g.fillStyle = '#c9c7bf'; g.fillRect(x - 22, y - 22, s + 44, s + 44);
+    const cg = g.createLinearGradient(x, y, x + s, y + s); cg.addColorStop(0, '#b38a4a'); cg.addColorStop(0.5, '#d9b06a'); cg.addColorStop(1, '#8f6b36');
+    g.fillStyle = cg; g.fillRect(x, y, s, s);
+    g.fillStyle = '#4b3a28'; g.fillRect(x + s / 2 - 3, y + 26, 6, s - 52); g.fillRect(x + 26, y + s / 2 - 3, s - 52, 6);
+    g.fillStyle = '#22252b'; g.fillRect(400, 40, 70, 34); g.fillRect(420, 300, 56, 28);  // connectors
+    g.fillStyle = '#8a8f98'; for (const [px, py] of [[24, 24], [488, 24], [24, 360], [488, 360]]) { g.beginPath(); g.arc(px, py, 8, 0, 6.283); g.fill(); }
+  });
+}
+/** Copper tape: warm, slightly streaky, with overlapping seams. */
+function copperTapeTex() {
+  return canvasTex(512, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#c27a52'); gr.addColorStop(0.5, '#dd9a70'); gr.addColorStop(1, '#b8693f');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const rnd = mulberry32(13);
+    for (let i = 0; i < 1600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '90,40,20' : '255,210,170'},${rnd() * 0.07})`; g.fillRect(rnd() * w, rnd() * h, 4 + rnd() * 30, 1); }
+    g.fillStyle = 'rgba(70,32,16,0.35)'; for (const x of [170, 340]) g.fillRect(x, 0, 2, h);
+  });
+}
+/** Beige beta-cloth thermal blanket, as wrapped around the deployer on the station's arm. */
+function betaClothTex() {
+  return canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#cdbb98'; g.fillRect(0, 0, w, h);
+    const rnd = mulberry32(5);
+    for (let i = 0; i < 26; i++) {                                     // soft wrinkles
+      const x = rnd() * w, y = rnd() * h, r = 40 + rnd() * 160;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      const d = rnd() < 0.5 ? '120,100,70' : '235,222,195';
+      gr.addColorStop(0, `rgba(${d},${0.10 + rnd() * 0.12})`); gr.addColorStop(1, `rgba(${d},0)`);
+      g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+    }
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(80,65,45,${rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 1, 1); }
+    g.strokeStyle = 'rgba(110,92,64,0.45)'; g.lineWidth = 2; g.setLineDash([6, 5]);   // stitched seams
+    for (const t of [0.04, 0.96]) { g.beginPath(); g.moveTo(t * w, 0); g.lineTo(t * w, h); g.stroke(); g.beginPath(); g.moveTo(0, t * h); g.lineTo(w, t * h); g.stroke(); }
+  });
+}
+function glowTex(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,0)') {
+  return canvasTex(128, 128, (g) => {
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, inner); gr.addColorStop(0.22, inner.replace(/[\d.]+\)$/, '0.55)')); gr.addColorStop(1, outer);
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  });
+}
+function labelTex(text, sub) {
+  return canvasTex(512, 128, (g) => {
+    g.font = '600 52px "Barlow Condensed", sans-serif'; g.fillStyle = '#e3e8f0'; g.textBaseline = 'alphabetic';
+    g.shadowColor = 'rgba(0,0,0,0.9)'; g.shadowBlur = 10;
+    g.fillText(text, 8, 58);
+    if (sub) { g.font = '400 30px Barlow, sans-serif'; g.fillStyle = '#9aa6b8'; g.fillText(sub, 8, 100); }
+  });
+}
+function barcodeTex() {
+  return canvasTex(512, 96, (g, w, h) => {
+    g.fillStyle = '#f4f4f0'; g.fillRect(0, 0, w, h);
+    const rnd = mulberry32(42692);
+    let x = 60;
+    while (x < w - 60) { const bw = 2 + Math.floor(rnd() * 5); if (rnd() > 0.4) { g.fillStyle = '#111'; g.fillRect(x, 10, bw, 58); } x += bw + 1; }
+    g.fillStyle = '#111'; g.font = '500 20px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText('42692', w / 2, 88);
+  });
+}
+
+/* =====================================================================
+   6. THE SPACECRAFT — 6U, 36.6 × 22.6 × 9.9 cm (long axis X, thin axis Y)
+   Layout after NASA's mechanical-layout slide and flight photos (Spremo 2018).
+   ===================================================================== */
+const L = 36.6, W6 = 22.6, H6 = 9.9;
+const craftPivot = new THREE.Group();     // attitude
+const craft = new THREE.Group();          // the spacecraft itself
+craftPivot.add(craft);
+craftScene.add(craftPivot);
+const solarMats = {};                     // panel number → material (emissive driven by data)
+let mats;
+
+function buildMaterials() {
+  mats = {
+    gold: new THREE.MeshStandardMaterial({ color: 0xd6aa55, metalness: 1, roughness: 0.28 }),
+    copper: new THREE.MeshStandardMaterial({ color: 0xc27a4e, metalness: 1, roughness: 0.38 }),
+    copperTape: new THREE.MeshStandardMaterial({ map: copperTapeTex(), metalness: 0.85, roughness: 0.42 }),
+    steel: new THREE.MeshStandardMaterial({ color: 0xcfd3d8, metalness: 1, roughness: 0.26 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x1a1d22, metalness: 0.4, roughness: 0.6 }),
+    bolt: new THREE.MeshStandardMaterial({ color: 0x9ea3ab, metalness: 1, roughness: 0.3 }),
+    alu: new THREE.MeshStandardMaterial({ color: 0xa9adb3, metalness: 0.75, roughness: 0.42 }),
+    white: new THREE.MeshStandardMaterial({ color: 0xe9e8e3, metalness: 0, roughness: 0.62 }),
+  };
+}
+function solarMaterial(face) {
+  return new THREE.MeshPhysicalMaterial({
+    map: face.map, roughnessMap: face.rough, roughness: 1, metalnessMap: face.metal, metalness: 1,
+    // coverglass with its anti-reflection coating: glossy, with a faint violet-blue sheen
+    clearcoat: 0.4, clearcoatMap: face.glass, clearcoatRoughness: 0.32,
+    iridescence: 0.1, iridescenceMap: face.glass, iridescenceIOR: 1.8, iridescenceThicknessRange: [260, 420],
+    emissive: new THREE.Color(0x3a3f9a), emissiveMap: face.emissive, emissiveIntensity: 0,
+  });
+}
+function buildCraft() {
+  // Body under the panels
+  craft.add(new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, H6 - 0.4, W6 - 0.4), mats.dark));
+  // Two 3U halves side by side: the payload (−Z) is gold-plated, the bus (+Z) copper-taped.
+  // Seen from the patch end (+X) with the antenna corner up, copper is on the left.
+  const fin = z => (z < 0 ? mats.gold : mats.copperTape);
+
+  // Large faces (±Y): two rows of eight cells either side of the copper strip.
+  // On +Y the canvas top edge maps to −Z; on −Y it maps to +Z.
+  const big = solarFace({ wCm: L, hCm: W6, rows: 2, strip: 5.8, trimTop: 'gold', trimBottom: 'copper', seed: 11 });
+  const big2 = solarFace({ wCm: L, hCm: W6, rows: 2, strip: 5.8, trimTop: 'copper', trimBottom: 'gold', seed: 23 });
+  // Long narrow faces (±Z): one row of eight, four and four
+  const side = solarFace({ wCm: L, hCm: H6, rows: 1, trimTop: 'copper', seed: 31, edge: 1.0 });
+  const side2 = solarFace({ wCm: L, hCm: H6, rows: 1, trimTop: 'gold', seed: 47, edge: 1.0 });
+  const faces = [
+    // panel numbering on the model is illustrative: the beacon names panels 1–4
+    { n: 1, tex: big,   w: L, h: W6, pos: [0, H6 / 2 + 0.03, 0], rot: [-Math.PI / 2, 0, 0] },
+    { n: 2, tex: side,  w: L, h: H6, pos: [0, 0, W6 / 2 + 0.03], rot: [0, 0, 0] },
+    { n: 3, tex: big2,  w: L, h: W6, pos: [0, -H6 / 2 - 0.03, 0], rot: [Math.PI / 2, 0, 0] },
+    { n: 4, tex: side2, w: L, h: H6, pos: [0, 0, -W6 / 2 - 0.03], rot: [0, Math.PI, 0] },
+  ];
+  for (const f of faces) {
+    const m = solarMaterial(f.tex);
+    solarMats[f.n] = m;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(f.w - 0.2, f.h - 0.2), m);
+    mesh.position.set(...f.pos); mesh.rotation.set(...f.rot);
+    craft.add(mesh);
+  }
+
+  // Ends. +X: copper tape on the bus half, the white patch-antenna block on the payload half.
+  // −X: each half in its own finish.
+  const halfEnd = (x, z, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, H6 - 0.6, W6 / 2 - 0.3), mat); m.position.set(x, 0, z); craft.add(m); };
+  halfEnd(L / 2 + 0.02, W6 / 4, mats.copperTape);
+  halfEnd(-L / 2 - 0.02, W6 / 4, mats.copperTape);
+  halfEnd(-L / 2 - 0.02, -W6 / 4, mats.gold);
+  const block = new THREE.Mesh(new THREE.BoxGeometry(1.2, H6 - 0.9, W6 / 2 - 0.6), [
+    new THREE.MeshStandardMaterial({ map: patchBlockTex(), roughness: 0.6 }), mats.white, mats.white, mats.white, mats.white, mats.white,
+  ]);
+  block.position.set(L / 2 + 0.5, 0, -W6 / 4);
+  craft.add(block);
+
+  // Frame: four long rails and the end frames, each in its half's finish
+  const R = 0.85, rails = new THREE.Group();
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(L + 0.5, R, R), fin(sz));
+    r.position.set(0, sy * (H6 / 2 - R / 2 + 0.15), sz * (W6 / 2 - R / 2 + 0.15)); rails.add(r);
+  }
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(R, R * 0.8, W6 / 2), fin(sz));
+      b.position.set(sx * (L / 2 - R / 2 + 0.25), sy * (H6 / 2 - R / 2 + 0.15), sz * W6 / 4); rails.add(b);
+    }
+    for (const sz of [-1, 1]) { const b = new THREE.Mesh(new THREE.BoxGeometry(R, H6, R * 0.8), fin(sz)); b.position.set(sx * (L / 2 - R / 2 + 0.25), 0, sz * (W6 / 2 - R / 2 + 0.15)); rails.add(b); }
+  }
+  craft.add(rails);
+
+  // Fasteners along the rails
+  const boltGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.12, 10);
+  const bolts = new THREE.InstancedMesh(boltGeo, mats.bolt, 4 * 12);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(); let k = 0;
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) for (let i = 0; i < 12; i++) {
+    const x = -L / 2 + 2 + i * ((L - 4) / 11);
+    m4.compose(new THREE.Vector3(x, sy * (H6 / 2 + 0.6), sz * (W6 / 2 - 0.3)), q, new THREE.Vector3(1, 1, 1));
+    bolts.setMatrixAt(k++, m4);
+  }
+  craft.add(bolts);
+
+  // UHF beacon antenna: a white ~17 cm whip (a quarter wave at 437 MHz) standing out
+  // sideways from the copper-side top corner of the +X end, as in the lab photos
+  const ant = new THREE.Group();
+  const rodGeo = new THREE.CylinderGeometry(0.12, 0.12, 17, 8);
+  rodGeo.translate(0, 8.5, 0);
+  const rod = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({ color: 0xf2f2ee, metalness: 0.1, roughness: 0.45 }));
+  rod.name = 'uhf';
+  rod.scale.y = 0.01;   // stowed until EcAMSat is clear of the deployer
+  ant.add(rod);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 1.4), mats.gold);
+  ant.add(foot);
+  ant.position.set(L / 2 - 0.4, H6 / 2 - 0.2, W6 / 2 - 0.4);
+  ant.rotation.set(Math.PI / 2 - 0.1, 0, -0.12);   // +Y of the rod → +Z, tipped slightly up and out
+  craft.add(ant);
+
+  craft.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+}
+
+/* =====================================================================
+   7. THE FLUIDIC CARD — 60 optical wells (5 rows × 12) in a clear block
+   ===================================================================== */
+const card = new THREE.Group();
+const wells = [];   // { mesh, mat, glow, base }
+let cardLeader;
+// alamarBlue colours per row, after NASA's photo of a filled card (middle row unfilled)
+const ROW_COLOURS = [0xd4428f, 0xc23396, 0xe8eef2, 0xc8305e, 0x8a3fa8];
+function buildCard() {
+  const CW = 14.2, CD = 7.2, CT = 0.9;
+  const block = new THREE.Mesh(new THREE.BoxGeometry(CW, CT, CD), new THREE.MeshPhysicalMaterial({
+    color: 0xe6eef2, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.32, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: false,
+  }));
+  card.add(block);
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(block.geometry), new THREE.LineBasicMaterial({ color: 0xbfd6e2, transparent: true, opacity: 0.5 }));
+  card.add(edge);
+  const big = new THREE.CylinderGeometry(0.36, 0.36, CT * 0.82, 20);
+  const small = new THREE.CylinderGeometry(0.2, 0.2, CT * 0.7, 14);
+  for (let w = 0; w < WELL_COUNT; w++) {
+    const { row, slot } = wellPosition(w);
+    const x = -CW / 2 + 1.05 + slot * 1.0, z = -CD / 2 + 1.1 + row * 1.25;
+    const col = ROW_COLOURS[row];
+    const empty = row === 2;
+    const mat = new THREE.MeshStandardMaterial({
+      color: col, roughness: 0.3, metalness: 0, transparent: empty, opacity: empty ? 0.35 : 1,
+      emissive: new THREE.Color(col), emissiveIntensity: empty ? 0 : 0.08,
+    });
+    const m = new THREE.Mesh(big, mat);
+    m.position.set(x, 0, z - 0.12);
+    card.add(m);
+    const sm = new THREE.Mesh(small, new THREE.MeshStandardMaterial({ color: empty ? 0xe8eef2 : 0xf3c9dc, roughness: 0.35, transparent: empty, opacity: empty ? 0.3 : 1 }));
+    sm.position.set(x + 0.44, 0, z + 0.3);
+    card.add(sm);
+    wells.push({ mesh: m, mat, base: empty ? 0 : 0.08, level: empty ? 0 : 0.08, target: empty ? 0 : 0.08, colour: new THREE.Color(col) });
+  }
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.8), new THREE.MeshStandardMaterial({ map: barcodeTex(), roughness: 0.7 }));
+  label.rotation.x = -Math.PI / 2; label.position.set(1.2, CT / 2 + 0.01, -CD / 2 + 0.5);
+  card.add(label);
+  card.name = 'card';
+  card.visible = false;
+  craft.add(card);
+  // dashed leader from the payload bay to the exploded card
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, H6 / 2, 0), new THREE.Vector3(0, 15, 0)]);
+  cardLeader = new THREE.Line(g, new THREE.LineDashedMaterial({ color: 0xd4a94f, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0 }));
+  cardLeader.computeLineDistances();
+  cardLeader.name = 'leader';
+  craft.add(cardLeader);
+}
+let cardOut = false;
+function setCardOut(out, dur = 900) {
+  if (out === cardOut) return; cardOut = out;
+  if (out) card.visible = true;
+  const y0 = card.position.y, y1 = out ? 15 : 0, r0 = card.rotation.x, r1 = out ? 1.25 : 0;
+  tween({ dur: reducedMotion ? 1 : dur, ease: Ease.inOutCubic, update: k => {
+    card.position.y = lerp(y0, y1, k);
+    card.rotation.x = lerp(r0, r1, k);
+    cardLeader.material.opacity = (out ? k : 1 - k) * 0.7;
+  }, done: () => { if (!out) card.visible = false; } });
+}
+/** Light the well a beacon reported, in the colour its TAOS sensor saw. */
+function lightWell(n, rgb) {
+  for (const w of wells) w.target = w.base;
+  const w = wells[n];
+  if (!w) return;
+  if (rgb) w.mat.emissive.setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
+  w.target = 2.2;
+  const p = new THREE.Vector3(); w.mesh.getWorldPosition(p);
+  wellLight.position.copy(p).add(new THREE.Vector3(0, 2.2, 0));
+  wellLight.color.copy(w.mat.emissive);
+  wellLight.userData.target = 18;
+  setTimeout(() => { if (w.target === 2.2) { w.target = 0.9; wellLight.userData.target = 6; } }, 1800);
+}
+
+/* =====================================================================
+   8. THE DEPLOYER, THE ARM, AND A GLIMPSE OF THE STATION
+   ===================================================================== */
+const station = new THREE.Group();   // everything that recedes as EcAMSat leaves
+let deployDoor;
+function buildDeployer() {
+  const dep = new THREE.Group();
+  const IL = 43.5, IH = 12.5, IW = 26, T = 0.5;
+  // Outside: the beige beta-cloth blanket seen on the arm in the ISS photos. Inside: bare
+  // aluminium rails. Box face order is +X, −X, +Y, −Y, +Z, −Z; `inner` is the face toward EcAMSat.
+  const beta = new THREE.MeshStandardMaterial({ map: betaClothTex(), roughness: 0.92, metalness: 0 });
+  const plate = (w, h, d, x, y, z, inner) => {
+    const faces = Array(6).fill(beta); faces[inner] = mats.alu;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), faces); m.position.set(x, y, z); dep.add(m); return m;
+  };
+  const B = 1.2;   // blanket thickness
+  plate(IL, B, IW + 2 * B, -1.5, IH / 2 + B / 2, 0, 3);
+  plate(IL, B, IW + 2 * B, -1.5, -IH / 2 - B / 2, 0, 2);
+  plate(IL, IH, B, -1.5, 0, IW / 2 + B / 2, 5);
+  plate(IL, IH, B, -1.5, 0, -IW / 2 - B / 2, 4);
+  plate(B, IH + 2 * B, IW + 2 * B, -1.5 - IL / 2 - B / 2, 0, 0, 0);
+  // the guide rails EcAMSat slides along, at its four long edges
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) { const r = new THREE.Mesh(new THREE.BoxGeometry(IL, 0.5, 0.5), mats.alu); r.position.set(-1.5, sy * (IH / 2 - 0.25), sz * (IW / 2 - 0.25)); dep.add(r); }
+  // black anodised frame around the open end
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x1b1d21, metalness: 0.5, roughness: 0.5 });
+  const fx = -1.5 + IL / 2 - 0.4;
+  for (const sy of [-1, 1]) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.8, B + 0.4, IW + 2 * B + 0.4), frameMat); f.position.set(fx, sy * (IH / 2 + B / 2), 0); dep.add(f); }
+  for (const sz of [-1, 1]) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.8, IH + 2 * B + 0.4, B + 0.4), frameMat); f.position.set(fx, 0, sz * (IW / 2 + B / 2)); dep.add(f); }
+  // the door, hinged on its lower edge at +X
+  deployDoor = new THREE.Group();
+  const door = new THREE.Mesh(new THREE.BoxGeometry(T, IH + 2 * B, IW + 2 * B), frameMat);
+  door.position.set(0, (IH + 2 * B) / 2, 0);
+  deployDoor.add(door);
+  deployDoor.position.set(-1.5 + IL / 2 + T / 2, -IH / 2 - B, 0);
+  dep.add(deployDoor);
+  // pusher plate
+  const push = new THREE.Mesh(new THREE.BoxGeometry(0.6, IH - 1, IW - 2), mats.dark);
+  push.position.set(-1.5 - IL / 2 + 1, 0, 0);
+  dep.add(push);
+  dep.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  station.add(dep);
+
+  // The JEM robotic arm's end effector holding the deployer (after the ISS deployment photo)
+  const arm = new THREE.Group();
+  const seg = (r, len, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 20), mat); return m; };
+  const wrist = seg(4.2, 9, mats.white); wrist.rotation.z = Math.PI / 2; wrist.position.set(-28.5, 6, 0); arm.add(wrist);
+  const boom = seg(3.4, 120, mats.white); boom.position.set(-31, 66, -10); boom.rotation.z = -0.18; boom.rotation.x = 0.1; arm.add(boom);
+  const joint = new THREE.Mesh(new THREE.SphereGeometry(5.5, 20, 12), mats.alu); joint.position.set(-41, 126, -16); arm.add(joint);
+  arm.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  station.add(arm);
+
+  // Distant station hardware: two solar array wings and a radiator, far up and back
+  const arrayTex = canvasTex(256, 1024, (g, w, h) => {
+    g.fillStyle = '#5a3a12'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 32) { g.fillStyle = `rgb(${190 + (x * y) % 30},${120 + (y % 40)},${40})`; g.fillRect(x + 1, y + 1, 30, 14); }
+  });
+  const arrMat = new THREE.MeshStandardMaterial({ map: arrayTex, metalness: 0.3, roughness: 0.45, emissive: 0x2a1500, emissiveIntensity: 0.4, side: THREE.DoubleSide });
+  for (const [x, y, z] of [[-560, 190, -430], [-430, 230, -540]]) {
+    const wing = new THREE.Mesh(new THREE.PlaneGeometry(90, 420), arrMat);
+    wing.position.set(x, y, z); wing.rotation.set(0.5, 0.35, 0.9);
+    station.add(wing);
+  }
+  const rad = new THREE.Mesh(new THREE.BoxGeometry(60, 300, 4), mats.white);
+  rad.position.set(-300, 240, -520); rad.rotation.set(0.2, 0.4, 0.6);
+  station.add(rad);
+  craftScene.add(station);
+}
+
+/* =====================================================================
+   9. EARTH, SUN AND ORBIT
+   Earth radius = 100 units. ECI → three.js: (x, y, z) → (x, z, −y), so +Y is north.
+   ===================================================================== */
+const R_E = 100, ALT_KM = 409, INC = 51.64 * DEG, PERIOD_S = 92.6 * 60;
+const R_ORBIT = R_E * (6371 + ALT_KM) / 6371;
+const HORIZON = Math.acos(6371 / (6371 + ALT_KM));     // footprint half-angle at 0° elevation
+const eciToThree = (x, y, z) => new THREE.Vector3(x, z, -y);
+const latLon = (lat, lon, r = R_E) => new THREE.Vector3(Math.cos(lat * DEG) * Math.cos(lon * DEG), Math.sin(lat * DEG), -Math.cos(lat * DEG) * Math.sin(lon * DEG)).multiplyScalar(r);
+function gmst(ms) { const d = ms / 86400000 + 2440587.5 - 2451545.0; return ((280.46061837 + 360.98564736629 * d) % 360) * DEG; }
+function sunEci(ms) {
+  const n = ms / 86400000 + 2440587.5 - 2451545.0;
+  const Lm = (280.460 + 0.9856474 * n) * DEG, g = (357.528 + 0.9856003 * n) * DEG;
+  const lam = Lm + (1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * DEG, eps = (23.439 - 0.0000004 * n) * DEG;
+  return eciToThree(Math.cos(lam), Math.cos(eps) * Math.sin(lam), Math.sin(eps) * Math.sin(lam)).normalize();
+}
+
+const EARTH_VS = `
+  varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+  void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const EARTH_FS = `
+  uniform sampler2D dayMap; uniform sampler2D nightMap; uniform vec3 sunDir; uniform float nightBoost; uniform float haze; uniform float gain; uniform float glint;
+  varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+  void main() {
+    vec3 n = normalize(vN); vec3 v = normalize(cameraPosition - vW);
+    float ndl = dot(n, sunDir);
+    float day = smoothstep(-0.10, 0.20, ndl);
+    vec3 dayC = texture2D(dayMap, vUv).rgb;
+    vec3 nightC = texture2D(nightMap, vUv).rgb;
+    float ocean = smoothstep(0.015, 0.07, dayC.b - max(dayC.r, dayC.g) * 0.85) * (1.0 - smoothstep(0.25, 0.4, dayC.g));
+    vec3 col = dayC * (0.03 + 1.35 * max(ndl, 0.0)) * gain;
+    vec3 h = normalize(sunDir + v);
+    col += vec3(1.0, 0.86, 0.66) * pow(max(dot(n, h), 0.0), 70.0) * ocean * day * glint;
+    vec3 lights = pow(nightC, vec3(1.6)) * vec3(1.0, 0.72, 0.42) * nightBoost;
+    col = col * day + lights * (1.0 - smoothstep(-0.25, 0.05, ndl));
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+    col += vec3(0.32, 0.56, 1.0) * fres * (0.08 + 0.9 * smoothstep(-0.25, 0.45, ndl)) * haze;
+    float tw = smoothstep(-0.12, 0.08, ndl) * (1.0 - smoothstep(0.08, 0.28, ndl));
+    col += vec3(0.6, 0.25, 0.08) * tw * fres * 0.6;
+    gl_FragColor = vec4(col, 1.0);
+  }`;
+const ATMO_FS = `
+  uniform vec3 sunDir; uniform float strength; varying vec3 vN; varying vec3 vW;
+  void main() {
+    vec3 n = normalize(vN); vec3 v = normalize(cameraPosition - vW);
+    float rim = pow(1.0 - abs(dot(n, v)), 5.0);
+    float lit = smoothstep(-0.35, 0.4, dot(n, sunDir));
+    gl_FragColor = vec4(vec3(0.35, 0.6, 1.0) * rim * (0.08 + lit) * 1.6 * strength, 1.0);
+  }`;
+const ATMO_VS = `varying vec3 vN; varying vec3 vW;
+  void main() { vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+
+let earthTex;
+function loadEarthTextures() {
+  const loader = new THREE.TextureLoader();
+  const size = isSmall ? 2048 : 4096;
+  const load = url => new Promise((res, rej) => loader.load(url, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = MAX_ANISO; res(t); }, undefined, rej));
+  return Promise.all([load(`textures/earth_day_${size}.jpg`), load(`textures/earth_night_${size}.jpg`)]).then(([day, night]) => { earthTex = { day, night }; });
+}
+function earthMaterial(sunDir, { nightBoost = 1.6, haze = 0.7, gain = 1, glint = 0.8 } = {}) {
+  return new THREE.ShaderMaterial({ uniforms: { dayMap: { value: earthTex.day }, nightMap: { value: earthTex.night }, sunDir: { value: sunDir }, nightBoost: { value: nightBoost }, haze: { value: haze }, gain: { value: gain }, glint: { value: glint } }, vertexShader: EARTH_VS, fragmentShader: EARTH_FS });
+}
+function atmosphere(radius, sunDir, strength = 1) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), new THREE.ShaderMaterial({
+    uniforms: { sunDir: { value: sunDir }, strength: { value: strength } }, vertexShader: ATMO_VS, fragmentShader: ATMO_FS,
+    blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+  }));
+}
+function starField(radius, count, seed) {
+  const rnd = mulberry32(seed), pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+    pos.set([Math.cos(th) * s * radius, u * radius, Math.sin(th) * s * radius], i * 3);
+    const b = 0.35 + Math.pow(rnd(), 3) * 1.4, warm = rnd();
+    col.set([b * (0.85 + warm * 0.2), b * 0.92, b * (1.08 - warm * 0.2)], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return new THREE.Points(g, new THREE.PointsMaterial({ size: isSmall ? 1.6 : 1.4, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
+}
+
+// Orbit scene
+const earth = new THREE.Group();          // rotates with GMST
+const sunDirOrbit = new THREE.Vector3(1, 0, 0);
+const orbitSun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+let satMarker, satModel, satGlow, trail, footprint, orbitPath, beamLines = {};
+const stationPins = {};
+const ORBIT = { raan: 0, u0: 0, t0: 0 };
+const SIM_START = Date.UTC(2017, 10, 20, 7, 30);   // just after deployment
+const sim = { t: SIM_START, warp: store.get('warp', 60), follow: true };
+let deployedSat = false;
+
+/** Place the orbit so the spacecraft rises over Japan a few minutes after the start. */
+function solveOrbit() {
+  const target = { lat: 18, lon: 118 }, tT = SIM_START + 6 * 60000;
+  const u = Math.asin(Math.sin(target.lat * DEG) / Math.sin(INC));
+  const alpha = target.lon * DEG + gmst(tT);
+  ORBIT.raan = alpha - Math.atan2(Math.cos(INC) * Math.sin(u), Math.cos(u));
+  ORBIT.u0 = u - 2 * Math.PI * (tT - SIM_START) / 1000 / PERIOD_S;
+  ORBIT.t0 = SIM_START;
+}
+function satEci(ms) {
+  const dt = (ms - ORBIT.t0) / 1000;
+  const u = ORBIT.u0 + 2 * Math.PI * dt / PERIOD_S;
+  const raan = ORBIT.raan - 5.0 * DEG * dt / DAY;   // nodal regression, ≈ −5°/day at ISS altitude
+  const cu = Math.cos(u), su = Math.sin(u), cO = Math.cos(raan), sO = Math.sin(raan), ci = Math.cos(INC), si = Math.sin(INC);
+  return eciToThree(R_ORBIT * (cO * cu - sO * su * ci), R_ORBIT * (sO * cu + cO * su * ci), R_ORBIT * su * si);
+}
+function buildOrbitScene() {
+  orbitScene.add(starField(6000, isSmall ? 2200 : 4200, 99));
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(R_E, 160, 100), earthMaterial(sunDirOrbit));
+  earth.add(globe);
+  orbitScene.add(earth);
+  orbitScene.add(atmosphere(R_E * 1.035, sunDirOrbit));
+  orbitScene.add(orbitSun, new THREE.AmbientLight(0x30384a, 0.4));
+  orbitScene.environment = craftScene.environment;
+  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex('rgba(255,244,220,1)'), blending: THREE.AdditiveBlending, depthWrite: false }));
+  sunSprite.scale.setScalar(420); sunSprite.userData.sun = true;
+  orbitScene.add(sunSprite);
+
+  // Ground stations
+  for (const [call, s] of Object.entries(STATIONS)) {
+    const pin = new THREE.Group();
+    const p = latLon(s.lat, s.lon, R_E);
+    const isScu = call === 'SCU';
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8), new THREE.MeshBasicMaterial({ color: isScu ? 0xf0cd7a : 0x7fe3ff }));
+    dot.position.copy(p); pin.add(dot);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(isScu ? 'rgba(240,205,122,1)' : 'rgba(127,227,255,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
+    halo.position.copy(p); halo.scale.setScalar(7); pin.add(halo);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(isScu ? 'Santa Clara' : call, isScu ? 'mission ops' : 'ham station'), depthTest: true, transparent: true }));
+    label.center.set(-0.08, s.anchor ?? 0.5); label.position.copy(latLon(s.lat, s.lon, R_E * 1.03)); label.scale.set(24, 6, 1); pin.add(label);
+    earth.add(pin);
+    stationPins[call] = { pin, halo, world: new THREE.Vector3(), lastPass: -1, inView: false, queue: 0 };
+    const beam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: isScu ? 0xf0cd7a : 0x7fe3ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    orbitScene.add(beam); beamLines[call] = beam;
+  }
+
+  // The spacecraft: a scaled-up copy (≈50× life size, so it can be seen), a glow and a trail
+  satMarker = new THREE.Group();
+  satModel = craft.clone(true);
+  satModel.getObjectByName('card').visible = false;
+  satModel.getObjectByName('leader').visible = false;
+  satModel.scale.setScalar(0.05);
+  satMarker.add(satModel);
+  satGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex('rgba(127,227,255,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.85 }));
+  satGlow.scale.setScalar(9); satMarker.add(satGlow);
+  orbitScene.add(satMarker);
+
+  const N = 220;
+  const tg = new THREE.BufferGeometry();
+  tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  tg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  trail = new THREE.Line(tg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  trail.userData = { n: N, filled: 0 };
+  trail.frustumCulled = false;
+  orbitScene.add(trail);
+
+  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(97 * 3), 3));
+  footprint = new THREE.Line(fg, new THREE.LineBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.4 }));
+  footprint.frustumCulled = false;
+  orbitScene.add(footprint);
+
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(257 * 3), 3));
+  orbitPath = new THREE.Line(pg, new THREE.LineDashedMaterial({ color: 0x8b95a7, dashSize: 2.2, gapSize: 2.6, transparent: true, opacity: 0.35 }));
+  orbitPath.frustumCulled = false;
+  orbitScene.add(orbitPath);
+  solveOrbit();
+}
+function updateOrbitPath() {
+  const p = orbitPath.geometry.attributes.position;
+  for (let i = 0; i <= 256; i++) { const v = satEci(sim.t + (i / 256) * PERIOD_S * 1000); p.setXYZ(i, v.x, v.y, v.z); }
+  p.needsUpdate = true; orbitPath.computeLineDistances();
+}
+function updateFootprint(dir) {
+  const p = footprint.geometry.attributes.position;
+  const a = new THREE.Vector3(0, 1, 0); if (Math.abs(dir.y) > 0.9) a.set(1, 0, 0);
+  const u = new THREE.Vector3().crossVectors(dir, a).normalize(), w = new THREE.Vector3().crossVectors(dir, u);
+  const c = Math.cos(HORIZON), s = Math.sin(HORIZON);
+  for (let i = 0; i <= 96; i++) {
+    const th = (i / 96) * Math.PI * 2;
+    const v = dir.clone().multiplyScalar(c).addScaledVector(u, s * Math.cos(th)).addScaledVector(w, s * Math.sin(th)).multiplyScalar(R_E * 1.003);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  p.needsUpdate = true;
+}
+
+// Craft-scene Earth backdrop (same imagery, huge and close below)
+let backdrop;
+function buildBackdrop() {
+  const sun = SUN_CRAFT.clone();
+  const R = 6000;
+  backdrop = new THREE.Group();
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(R, 128, 96), earthMaterial(sun, { nightBoost: 1.2, haze: 0.18, gain: 0.8, glint: 0.12 }));
+  backdrop.add(globe);
+  backdrop.add(atmosphere(R * 1.012, sun, 0.3));
+  backdrop.position.set(0, -R - 170, -300);
+  backdrop.rotation.set(-0.35, 1.2, 0.2);
+  craftScene.add(backdrop);
+  craftScene.add(starField(9000, isSmall ? 1600 : 3200, 7));
+}
+
+/* =====================================================================
+   10. DECODER BENCH — the 2017 script's steps, made visible
+   ===================================================================== */
+const FIELD_LABELS = { header: 'Header', busTime: 'Bus time', solarI: 'Solar I', solarT: 'Solar T', health0: 'Health 0', health1: 'Health 1', health2: 'Health 2', health3: 'Health 3', page: 'Page', cardTemp: 'Card temp', well: 'Well', taosR: 'TAOS R', taosG: 'TAOS G', taosB: 'TAOS B' };
+let current = { packet: '', station: '' };
+let decoding = false;
+let beaconIdx = 0;
+let decodeRun = 0;
+const tempo = () => Number($('#tempo').value);
+const wait = ms => sleep(reducedMotion ? 0 : ms * tempo());
+
+function setPacket(packet, station = '', when = '') {
+  current = { packet, station };
+  $('#pkt').value = packet;
+  updateCounter();
+  $('#tapeStation').textContent = station || 'pasted';
+  $('#tapeWhen').textContent = when;
+  renderTape(packet, false);
+  setStatus('');
+}
+function setStatus(text, cls = '') { const s = $('#tapeStatus'); s.textContent = text; s.className = 'status ' + cls; }
+function updateCounter() {
+  const v = $('#pkt').value.replace(/\n/g, ''), n = v.trimEnd().length, c = $('#count');
+  c.textContent = `${n}/64`;
+  c.className = 'counter' + (n === 64 ? ' ok' : n > 64 ? ' bad' : '');
+}
+/** Build the tape: fields → bytes → characters, so bytes can physically swap. */
+function renderTape(packet, pending) {
+  const host = $('#tapeText');
+  host.innerHTML = '';
+  if (!packet) { host.innerHTML = '<span class="ph">Waiting for a beacon…</span>'; return; }
+  const ok = packet.length === 64;
+  const fields = ok ? FIELDS : [{ key: 'header', start: 0, len: packet.length }];
+  for (const f of fields) {
+    const el = document.createElement('span');
+    el.className = 'fld'; el.dataset.k = f.key; el.style.setProperty('--c', `var(--f-${f.key})`);
+    const text = packet.slice(f.start, f.start + f.len);
+    const step = f.key === 'header' ? text.length : 2;
+    for (let i = 0; i < text.length; i += step) {
+      const b = document.createElement('span'); b.className = 'byte';
+      for (const ch of text.slice(i, i + step)) { const c = document.createElement('span'); c.className = 'ch' + (pending ? ' pending' : ''); c.textContent = ch; b.appendChild(c); }
+      el.appendChild(b);
+    }
+    host.appendChild(el);
+  }
+}
+const tapeField = k => $(`#tapeText .fld[data-k="${k}"]`);
+function scrollTapeTo(el) {
+  const host = $('#tapeText');
+  const x = el.getBoundingClientRect().left - host.getBoundingClientRect().left + host.scrollLeft - host.clientWidth * 0.35;
+  host.scrollTo({ left: Math.max(0, x), behavior: reducedMotion ? 'auto' : 'smooth' });
+}
+/** Reverse a little-endian field's bytes on the tape, sliding each into place. */
+async function swapBytes(el) {
+  const bytes = [...el.querySelectorAll('.byte')];
+  if (bytes.length < 2) return;
+  const xs = bytes.map(b => b.getBoundingClientRect().left);
+  const n = bytes.length;
+  bytes.forEach((b, i) => { b.style.transform = `translateX(${xs[n - 1 - i] - xs[i]}px)`; });
+  sound.swap();
+  await wait(330);
+  bytes.forEach(b => { b.style.transition = 'none'; b.style.transform = ''; });
+  bytes.reverse().forEach(b => el.appendChild(b));
+  void el.offsetWidth;
+  bytes.forEach(b => { b.style.transition = ''; });
+}
+function stepRow(f) {
+  const d = document.createElement('div');
+  d.className = 'step'; d.style.setProperty('--c', `var(--f-${f.key})`);
+  d.innerHTML = `<span class="k">${FIELD_LABELS[f.key]}</span><span class="v"></span>`;
+  return d;
+}
+function readoutHTML(items) {
+  return items.map(([t, n, cls = '']) => `<div class="ro ${cls}"><div class="t">${t}</div><div class="n">${n}</div></div>`).join('');
+}
+/** TAOS light-to-frequency readings → a display colour (null when the sensor read nothing). */
+function taosColour(d) {
+  const m = Math.max(d.taos_r_hz, d.taos_g_hz, d.taos_b_hz);
+  if (!m) return null;
+  return [d.taos_r_hz / m, d.taos_g_hz / m, d.taos_b_hz / m];
+}
+const TYPE_FIELDS = {
+  1: [['power_port_status', 'Power port status', v => v], ['payload_board_temp_c', 'Payload board', v => `${fmt(v, 2)} <small>°C</small>`], ['battery_voltage_v', 'Battery', v => `${fmt(v, 3)} <small>V</small>`], ['payload_heater_current_ma', 'Payload heater', v => `${fmt(v, 1)} <small>mA</small>`]],
+  2: [['startup_counter', 'Startup counter', v => v], ['radiation_counts_per_30s', 'Radiation', v => `${v} <small>/30 s</small>`], ['comm_voltage_v', 'Comm voltage', v => `${fmt(v, 3)} <small>V</small>`], ['payload_current_ma', 'Payload current', v => `${fmt(v, 1)} <small>mA</small>`]],
+  3: [['spacecraft_ground_id', 'Spacecraft → ground ID', v => v], ['comm_current_ma', 'Comm current', v => `${fmt(v, 1)} <small>mA</small>`], ['sensor_voltage_v', 'Sensor voltage', v => `${fmt(v, 3)} <small>V</small>`], ['bus_data_page', 'Bus data page', v => v]],
+  4: [['experiment_phase', 'Experiment phase', v => v], ['comm_voltage_v', 'Comm voltage', v => `${fmt(v, 3)} <small>V</small>`], ['bus_voltage_v', 'Bus voltage', v => `${fmt(v, 3)} <small>V</small>`], ['register_file_wrap_count', 'Register wrap count', v => v]],
+};
+const HEALTH_CAL = {
+  1: ['bin(h0)', 'h1 × 0.0554 − 15.75', 'h2 × 0.0119 − 0.05', 'h3 × 3.2922 + 8.04'],
+  2: ['h0', 'h1', 'h2 × 0.0119 + 0.01', 'h3 × 3.4281 − 22.69'],
+  3: ['h0', 'h1 × 4.3330 + 16.27', 'h2 × 0.0130 − 0.48', 'h3'],
+  4: ['bin(h0)', 'h1 × 0.0119 + 0.01', 'h2 × 0.0059', 'h3'],
+};
+
+/** One health word as the bench shows it: the calibration, then the value in units. */
+function healthText(d, i) {
+  const [key, , f] = TYPE_FIELDS[d.data_type][i];
+  const val = String(f(d.type_specific_data[key])).replace(/<\/?small>/g, '');
+  const formula = HEALTH_CAL[d.data_type][i];
+  return /^h\d$/.test(formula) ? val : `${formula} = ${val}`;
+}
+
+async function decode(packetIn, opts) {
+  try { await runDecode(packetIn, opts); }
+  catch (err) { console.error(err); decoding = false; setStatus('Decoder error — see console', 'bad'); }
+}
+async function runDecode(packetIn, { fly = true } = {}) {
+  const packet = (packetIn ?? $('#pkt').value).replace(/\n/g, '').trim();
+  const run = ++decodeRun;
+  const live = () => run === decodeRun;
+  if (!packet) { toast('Paste a packet or pick one a ham station received'); return; }
+  if (packet !== current.packet) { current = { packet, station: '' }; $('#tapeStation').textContent = 'pasted'; $('#tapeWhen').textContent = ''; }
+  const [ok, err] = validatePacket(packet);
+  renderTape(packet, false);
+  if (!ok) {
+    setStatus(err, 'bad');
+    $('#pkt').classList.add('bad');
+    $('#tape').classList.remove('glitch'); void $('#tape').offsetWidth; $('#tape').classList.add('glitch');
+    sound.glitch();
+    toast(err);
+    return;
+  }
+  $('#pkt').classList.remove('bad');
+  decoding = true;
+  const d = decodeBeacon(packet);
+  const parts = sliceFields(packet);
+  if (fly && view !== 'card') await setView('card');
+  setCardOut(true);
+  openPanel(true);
+  $('#readout').innerHTML = readoutHTML([['Decoding', '<small>…</small>', 'wide']]);
+  $('#warnings').innerHTML = '';
+  $('#typeline').textContent = '';
+  const steps = $('#steps'); steps.innerHTML = '';
+  const rows = Object.fromEntries(parts.map(f => { const r = stepRow(f); steps.appendChild(r); return [f.key, r]; }));
+  setStatus('Receiving…');
+
+  // 1. print the packet onto the tape
+  renderTape(packet, true);
+  const chars = [...$('#tapeText').querySelectorAll('.ch')];
+  const per = reducedMotion ? 0 : 14 * tempo();
+  for (let i = 0; i < chars.length; i++) {
+    if (!live()) return;
+    chars[i].classList.remove('pending');
+    if (i % 2 === 0) sound.tick();
+    if (i % 8 === 0) scrollTapeTo(chars[i]);
+    if (per) await sleep(per);
+  }
+  // 2. header
+  const hdr = parts[0], hEl = tapeField('header');
+  hEl.classList.add('on', 'hot'); scrollTapeTo(hEl);
+  rows.header.classList.add('lit');
+  rows.header.querySelector('.v').innerHTML = `"${HEADER.replace(/ /g, '·')}" <span class="out">✓</span>`;
+  sound.chime(1320);
+  await wait(420);
+  hEl.classList.remove('hot');
+
+  // 3. each field: highlight → swap little-endian bytes → integer → engineering units
+  const type = d.data_type;
+  const cal = {
+    busTime: () => `${d.bus_time_seconds} s · ${fmtBusTime(d.bus_time_seconds)}`,
+    solarI: () => `${fmt(d.solar_panel.current_ma, 1)} mA (panel ${type})`,
+    solarT: () => `${fmt(d.solar_panel.temperature_c, 1)} °C`,
+    health0: () => healthText(d, 0), health1: () => healthText(d, 1), health2: () => healthText(d, 2), health3: () => healthText(d, 3),
+    page: () => `page ${d.payload_page_number}`,
+    cardTemp: () => `÷ 100 = ${fmt(d.median_card_temp_c, 2)} °C`,
+    well: () => `well ${d.well_number} → type ${type}`,
+    taosR: () => `${d.taos_r_hz} Hz`, taosG: () => `${d.taos_g_hz} Hz`, taosB: () => `${d.taos_b_hz} Hz`,
+  };
+  for (const f of parts.slice(1)) {
+    if (!live()) return;
+    const el = tapeField(f.key), row = rows[f.key];
+    el.classList.add('on', 'hot'); scrollTapeTo(el);
+    row.classList.add('lit');
+    const v = row.querySelector('.v');
+    v.innerHTML = `${f.raw}`;
+    await wait(110);
+    if (f.le && f.len > 2) {
+      await swapBytes(el);
+      v.innerHTML = `${f.raw} <span class="arrow">⇄</span> ${f.swapped}`;
+      await wait(70);
+    }
+    v.innerHTML = `${f.le && f.len > 2 ? f.swapped : f.raw} <span class="arrow">→</span> <span class="out">${f.value}</span> <span class="arrow">→</span> <span class="out">${cal[f.key]()}</span>`;
+    sound.count();
+    if (f.key === 'well') {
+      $('#typeline').innerHTML = `Well <b>${d.well_number}</b> % 4 + 1 = <b>type ${type}</b> · ${TYPE_NAMES[type]}. The four health words mean something different for each type, and so does the solar reading: this one is <b>panel ${type}</b>.`;
+      flashPanel(type);
+    }
+    await wait(90);
+    el.classList.remove('hot');
+  }
+  // 4. results
+  const rgb = taosColour(d);
+  const sw = rgb ? `<span class="swatch" style="color:rgb(${rgb.map(c => Math.round(c * 255)).join(',')});background:currentColor"></span>` : '';
+  const { row, slot } = wellPosition(d.well_number);
+  const when = busTimeToDate(d.bus_time_seconds);
+  const warnings = plausibilityWarnings(d);
+  const items = [
+    ['Bus time', `${fmtBusTime(d.bus_time_seconds)}<small> · ≈ ${fmtDate(when, false)}</small>`, 'wide'],
+    [`Solar panel ${type}`, `${fmt(d.solar_panel.current_ma, 1)} <small>mA</small>`],
+    ['Panel temperature', `${fmt(d.solar_panel.temperature_c, 1)} <small>°C</small>`],
+    ...TYPE_FIELDS[type].map(([k, t, f]) => [t, f(d.type_specific_data[k])]),
+    ['Card temperature', `${fmt(d.median_card_temp_c, 2)} <small>°C</small>`, d.median_card_temp_c > 80 ? 'warn' : ''],
+    ['Payload page', `${d.payload_page_number}`, d.payload_page_number > 4095 ? 'warn' : ''],
+    ['Well', `${d.well_number} <small>row ${row + 1} · ${slot + 1}</small>`],
+    ['TAOS R / G / B', `${sw}${d.taos_r_hz} <small>/</small> ${d.taos_g_hz} <small>/</small> ${d.taos_b_hz}`, 'wide'],
+  ];
+  $('#readout').innerHTML = readoutHTML(items);
+  lightWell(d.well_number, rgb);
+  sound.well();
+  if (warnings.length) {
+    $('#warnings').innerHTML = warnings.map(w => `<li>${w}</li>`).join('') + '<li style="color:var(--muted)">Probably a corrupted copy: a few bits flipped between orbit and the operator\'s log.</li>';
+    $('#tape').classList.remove('glitch'); void $('#tape').offsetWidth; $('#tape').classList.add('glitch');
+    sound.glitch();
+    glitchCard();
+    setStatus('Decoded, but something is off', 'bad');
+  } else {
+    setStatus(`Decoded · type ${type} · ${TYPE_NAMES[type]}`, 'ok');
+  }
+  decoding = false;
+}
+function flashPanel(n) {
+  const m = solarMats[n]; if (!m) return;
+  const base = m.userData.base ?? 0;
+  tween({ dur: reducedMotion ? 1 : 1100, ease: Ease.outQuad, update: k => { m.emissiveIntensity = base + Math.sin(k * Math.PI) * 0.9; }, done: () => { m.emissiveIntensity = base; } });
+}
+function glitchCard() {
+  if (reducedMotion) return;
+  let n = 0;
+  const iv = setInterval(() => { card.position.x = (Math.random() - 0.5) * 0.6; card.rotation.z = (Math.random() - 0.5) * 0.04; if (++n > 10) { clearInterval(iv); card.position.x = 0; card.rotation.z = 0; } }, 45);
+}
+function nextBeacon() {
+  if (!BEACONS.length) return;
+  beaconIdx = (beaconIdx + 1) % BEACONS.length;
+  pickBeacon(beaconIdx);
+}
+function pickBeacon(i) {
+  beaconIdx = i;
+  const b = BEACONS[i];
+  $('#pick').value = String(i);
+  const d = decodeBeacon(b.packet);
+  setPacket(b.packet, b.station, `bus ${fmtBusTime(d.bus_time_seconds)}`);
+}
+
+/* =====================================================================
+   11. RECEIVER — waterfall and the log of heard beacons
+   ===================================================================== */
+const heard = [];
+function logHeard(b, i) {
+  heard.unshift({ ...b, i, at: sim.t });
+  if (heard.length > 6) heard.pop();
+  $('#log').innerHTML = heard.map((h, k) => `<li><button data-k="${k}"><b>${h.station}</b><span>${h.packet.slice(14, 34)}…</span></button></li>`).join('');
+}
+const VIRIDIS = [[68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142], [31, 158, 137], [53, 183, 121], [109, 205, 89], [180, 222, 44], [253, 231, 37]];
+function viridis(t) {
+  t = clamp(t, 0, 1) * (VIRIDIS.length - 1); const i = Math.floor(t), f = t - i;
+  const a = VIRIDIS[i], b = VIRIDIS[Math.min(i + 1, VIRIDIS.length - 1)];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+let wfData;
+function drawWaterfall() {
+  const c = $('#waterfall'), g = c.getContext('2d');
+  if (!sound.analyser || !panelOpen) return;
+  const an = sound.analyser;
+  wfData = wfData || new Uint8Array(an.frequencyBinCount);
+  an.getByteFrequencyData(wfData);
+  g.drawImage(c, 0, 0, c.width, c.height - 1, 0, 1, c.width, c.height - 1);
+  const row = g.createImageData(c.width, 1);
+  const hzPerBin = sound.ctx.sampleRate / an.fftSize, maxHz = 3500;
+  for (let x = 0; x < c.width; x++) {
+    const bin = Math.floor((x / c.width) * maxHz / hzPerBin);
+    const v = wfData[bin] / 255;
+    const [r, gg, b] = viridis(0.12 + v * 1.1);
+    row.data.set([r, gg, b, 255], x * 4);
+  }
+  g.putImageData(row, 0, 0);
+}
+
+/* =====================================================================
+   12. TELEMETRY REPLAY — 1,121 samples of real 2017 bus data
+   ===================================================================== */
+const TEMP_KEYS = ['t1', 't2', 't5', 't6', 't7', 't8', 't11', 't12'];
+const tele = { i: 0, playing: false, acc: 0, firstSpace: 0 };
+const MILESTONES = [
+  { label: 'Integrated', date: Date.UTC(2017, 9, 25, 16) },
+  { label: 'Launch', date: Date.UTC(2017, 10, 12, 12, 19) },
+  { label: 'Deployed', date: Date.UTC(2017, 10, 20, 6) },
+  { label: 'Experiment', date: Date.UTC(2017, 10, 24), end: Date.UTC(2017, 10, 30) },
+];
+const busDay = ms => (ms - BUS_EPOCH_MS) / 1000 / DAY;
+function solarTotal(i) { return BUS.solar_1i[i] + BUS.solar_2i[i] + BUS.solar_3i[i] + BUS.solar_4i[i]; }
+function setupTelemetry() {
+  const n = BUS.t.length;
+  tele.firstSpace = BUS.t.findIndex(t => t > 10 * DAY);
+  $('#scrub').max = String(n - 1);
+  const bar = (id, name, c) => `<div class="bar" id="${id}" style="--c:${c}"><span class="name">${name}</span><span class="track"><span class="fill"></span></span><span class="val">—</span></div>`;
+  $('#solarBars').innerHTML = [1, 2, 3, 4].map(k => bar(`sb${k}`, `Panel ${k}`, 'linear-gradient(90deg,#6d8cff,#a9c1ff)')).join('');
+  $('#powerBars').innerHTML = bar('pbBatt', 'Battery', 'linear-gradient(90deg,#6aa8ff,#7fe3ff)') + bar('pbBus', 'Bus', 'linear-gradient(90deg,#c9a7ff,#e1d0ff)') + bar('pbRad', 'Radiation', 'linear-gradient(90deg,#f0cd7a,#ff9d5c)');
+  $('#temps').innerHTML = TEMP_KEYS.map(k => `<div class="temp" id="tp_${k}"><small>${k.toUpperCase()}</small><span>—</span></div>`).join('');
+  drawTimeline(); drawSpark();
+  setTele(0);
+}
+function setBar(id, frac, text) { const el = $('#' + id); el.querySelector('.fill').style.width = `${clamp(frac, 0, 1) * 100}%`; el.querySelector('.val').textContent = text; }
+function tempColour(c) { const t = clamp((c + 10) / 50, 0, 1); return `rgb(${Math.round(60 + 195 * t)},${Math.round(120 + 40 * (1 - Math.abs(t - 0.5) * 2))},${Math.round(255 - 200 * t)})`; }
+function setTele(i) {
+  i = clamp(Math.round(i), 0, BUS.t.length - 1); tele.i = i;
+  $('#scrub').value = String(i);
+  const t = BUS.t[i], date = busTimeToDate(t), sol = solarTotal(i), inSun = sol > 250;
+  const space = i >= tele.firstSpace;
+  $('#tlRead').innerHTML = `<span><b>${fmtDate(date)}</b> ≈</span><span>bus <b>${fmtBusTime(t)}</b></span><span>battery <b>${fmt(BUS.battery_v[i], 2)} V</b></span><span>solar <b>${Math.round(sol)} mA</b></span>` +
+    (space ? `<span class="${inSun ? 'sun' : 'ecl'}">${inSun ? '☀ in sunlight' : '◐ in eclipse'}</span>` : '<span>on the ground · checkout</span>');
+  for (let k = 1; k <= 4; k++) {
+    const v = BUS[`solar_${k}i`][i];
+    setBar(`sb${k}`, v / 1900, `${Math.round(v)} mA`);
+    const m = solarMats[k]; if (m) { const base = space ? clamp(v / 1900, 0, 1) * 0.45 : 0; m.userData.base = base; m.emissiveIntensity = base; }
+  }
+  setBar('pbBatt', (BUS.battery_v[i] - 7) / 3, `${fmt(BUS.battery_v[i], 2)} V`);
+  setBar('pbBus', BUS.bus_v[i] / 6, `${fmt(BUS.bus_v[i], 2)} V`);
+  setBar('pbRad', BUS.radiation_sensor[i] / 120, `${fmt(BUS.radiation_sensor[i], 0)}`);
+  for (const k of TEMP_KEYS) { const el = $('#tp_' + k), v = BUS[k][i]; el.querySelector('span').textContent = fmt(v, 1); el.style.borderColor = tempColour(v); el.style.boxShadow = `inset 0 -3px 0 ${tempColour(v)}`; }
+  drawTimeline(); drawSpark();
+}
+function drawTimeline() {
+  const c = $('#tlCanvas'), g = c.getContext('2d'), W = c.width, H = c.height;
+  const D0 = -1, D1 = 45, X = d => ((d - D0) / (D1 - D0)) * (W - 40) + 20;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = '#121a28'; g.fillRect(20, 52, W - 40, 10);
+  // the long quiet stretch: integrated, launched, stowed in the deployer
+  const s0 = X(BUS.t[Math.max(0, tele.firstSpace - 1)] / DAY), s1 = X(BUS.t[tele.firstSpace] / DAY);
+  g.fillStyle = 'rgba(139,149,167,0.12)'; g.fillRect(s0, 40, s1 - s0, 34);
+  g.fillStyle = '#5a6578'; g.font = '500 22px "Barlow Condensed", sans-serif'; g.textAlign = 'center';
+  g.fillText('powered down in the deployer · no data', (s0 + s1) / 2, 98);
+  // samples
+  g.fillStyle = '#f0cd7a';
+  for (let i = 0; i < BUS.t.length; i++) g.fillRect(X(BUS.t[i] / DAY), 50, 2, 14);
+  // milestones
+  g.textAlign = 'left'; g.font = '500 22px "Barlow Condensed", sans-serif';
+  for (const m of MILESTONES) {
+    const x0 = X(busDay(m.date));
+    if (m.end) { g.fillStyle = 'rgba(241,106,176,0.25)'; g.fillRect(x0, 46, X(busDay(m.end)) - x0, 22); }
+    g.fillStyle = '#8b95a7'; g.fillRect(x0, 24, 2, 44);
+    g.fillStyle = '#c9d1de'; g.fillText(m.label, x0 + 6, 32);
+  }
+  // playhead
+  const px = X(BUS.t[tele.i] / DAY);
+  g.fillStyle = '#7fe3ff'; g.fillRect(px - 2, 14, 4, 62);
+  g.beginPath(); g.moveTo(px - 9, 10); g.lineTo(px + 9, 10); g.lineTo(px, 22); g.fill();
+}
+function drawSpark() {
+  const c = $('#spark'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const i0 = tele.firstSpace, n = BUS.t.length, X = i => ((i - i0) / (n - 1 - i0)) * W;
+  g.lineWidth = 1.2;
+  g.strokeStyle = 'rgba(240,205,122,0.8)'; g.beginPath();
+  for (let i = i0; i < n; i++) { const y = H - 6 - (solarTotal(i) / 2600) * (H - 12); i === i0 ? g.moveTo(X(i), y) : g.lineTo(X(i), y); }
+  g.stroke();
+  g.strokeStyle = 'rgba(106,168,255,0.95)'; g.beginPath();
+  for (let i = i0; i < n; i++) { const y = H - 6 - ((BUS.battery_v[i] - 7.2) / 3) * (H - 12); i === i0 ? g.moveTo(X(i), y) : g.lineTo(X(i), y); }
+  g.stroke();
+  if (tele.i >= i0) { g.fillStyle = '#7fe3ff'; g.fillRect(X(tele.i) - 1, 0, 2, H); }
+}
+
+/* =====================================================================
+   13. VIEWS & UI
+   ===================================================================== */
+let view = 'intro', started = false, panelOpen = false;
+const craftViews = new Set(['craft', 'card', 'telemetry']);
+function activeScene() { return view === 'orbit' ? orbitScene : craftScene; }
+async function setView(v, dur = 1600) {
+  if (v === view || !started) return;
+  const fromOrbit = view === 'orbit', toOrbit = v === 'orbit';
+  document.querySelectorAll('.views button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  const prev = view; view = v;
+  $('#tape').classList.toggle('hidden', v === 'telemetry');
+  $('#timeline').classList.toggle('hidden', v !== 'telemetry');
+  $('#clock').classList.toggle('hidden', v !== 'orbit');
+  $('#hint').classList.add('hide');
+  if (v !== 'card' && cardOut && v !== 'telemetry') setCardOut(false);
+  if (v === 'telemetry') { setCardOut(false); setTele(tele.i || tele.firstSpace); openPanel(true); $('#secTelemetry').scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' }); }
+  else if (prev === 'telemetry') restoreDecoderGlow();
+  sound.whoosh();
+  if (fromOrbit !== toOrbit) {
+    const fade = $('#fade');
+    if (!reducedMotion) { fade.classList.add('on'); await sleep(250); }
+    renderPass.scene = toOrbit ? orbitScene : craftScene;
+    renderPass.camera = toOrbit ? orbitCam : craftCam;
+    craftControls.enabled = !toOrbit; orbitControls.enabled = toOrbit;
+    if (toOrbit) { sim.follow = $('#follow').checked; placeOrbitCam(true); }
+    else { const t = CRAFT_VIEWS[v]; craftCam.position.copy(viewPos(t)).multiplyScalar(1.25); craftControls.target.copy(t.target); flyCraft(v, 1300); }
+    if (!reducedMotion) { fade.classList.remove('on'); }
+    return;
+  }
+  if (craftViews.has(v)) flyCraft(v, dur);
+}
+function flyCraft(v, dur) {
+  const t = CRAFT_VIEWS[v];
+  const p0 = craftCam.position.clone(), t0 = craftControls.target.clone(), p1 = viewPos(t), t1 = t.target.clone();
+  tween({ dur: reducedMotion ? 1 : dur, ease: Ease.inOutCubic, update: k => { craftCam.position.lerpVectors(p0, p1, k); craftControls.target.lerpVectors(t0, t1, k); } });
+}
+function restoreDecoderGlow() { for (let k = 1; k <= 4; k++) { const m = solarMats[k]; if (m) { m.userData.base = 0; m.emissiveIntensity = 0; } } }
+const _sat = new THREE.Vector3();
+function placeOrbitCam(snap) {
+  const dir = satEci(sim.t).normalize();
+  const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const want = dir.clone().multiplyScalar(250 * viewScale).addScaledVector(side, -120).add(new THREE.Vector3(0, 70, 0));
+  if (snap) orbitCam.position.copy(want);
+  orbitControls.target.set(0, 0, 0);
+  return want;
+}
+function openPanel(open) {
+  panelOpen = open ?? !panelOpen;
+  $('#panel').classList.toggle('open', panelOpen);
+  $('#btnPanel').classList.toggle('on', panelOpen);
+}
+function updateSoundButton() {
+  $('#btnSound').classList.toggle('on', !sound.muted);
+  $('#btnSound .wave').style.opacity = sound.muted ? 0.15 : 1;
+}
+
+function bindUI() {
+  document.querySelectorAll('.views button').forEach(b => b.addEventListener('click', () => { sound.select(); setView(b.dataset.view); }));
+  $('#btnPanel').addEventListener('click', () => { sound.select(); openPanel(); });
+  $('#btnSound').addEventListener('click', () => { sound.init(); sound.setMuted(!sound.muted); updateSoundButton(); });
+  $('#btnAbout').addEventListener('click', () => $('#about').showModal());
+  $('#btnAboutClose').addEventListener('click', () => $('#about').close());
+  $('#about').addEventListener('click', e => { if (e.target === $('#about')) $('#about').close(); });
+
+  // packet picker: grouped by station, in the order they were sent in
+  const groups = {};
+  BEACONS.forEach((b, i) => { (groups[b.station] ||= []).push(i); });
+  $('#pick').innerHTML = Object.entries(groups).map(([st, ids]) => `<optgroup label="${st} · ${STATIONS[st]?.area ?? ''}">` + ids.map(i => `<option value="${i}">${st} · ${BEACONS[i].packet.slice(14, 30)}…${plausibilityWarnings(decodeBeacon(BEACONS[i].packet)).length ? ' ⚠' : ''}</option>`).join('') + '</optgroup>').join('');
+  $('#pick').addEventListener('change', e => { pickBeacon(Number(e.target.value)); decode(); });
+  $('#pkt').addEventListener('input', () => { updateCounter(); $('#pkt').classList.remove('bad'); });
+  $('#pkt').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); decode(); } });
+  $('#btnDecode').addEventListener('click', () => decode());
+  $('#btnNext').addEventListener('click', () => { nextBeacon(); decode(); });
+  $('#btnTapeDecode').addEventListener('click', () => decode(current.packet || undefined));
+  $('#btnTapeNext').addEventListener('click', () => { nextBeacon(); decode(); });
+  $('#btnCopy').addEventListener('click', async () => {
+    if (!current.packet) return toast('Nothing on the tape yet');
+    try { await navigator.clipboard.writeText(current.packet); toast('Packet copied'); } catch { toast('Copy failed — select the packet text instead'); }
+  });
+  $('#log').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const h = heard[Number(b.dataset.k)]; if (!h) return;
+    pickBeacon(h.i); decode();
+  });
+
+  // telemetry
+  $('#scrub').addEventListener('input', e => { tele.playing = false; $('#btnPlay').textContent = '▶'; setTele(Number(e.target.value)); });
+  $('#btnPlay').addEventListener('click', () => {
+    tele.playing = !tele.playing; $('#btnPlay').textContent = tele.playing ? '❚❚' : '▶';
+    if (tele.playing && tele.i >= BUS.t.length - 1) setTele(tele.firstSpace);
+  });
+  $('#tlCanvas').addEventListener('pointerdown', e => {
+    const r = e.currentTarget.getBoundingClientRect(), W = e.currentTarget.width;
+    const day = ((e.clientX - r.left) / r.width * W - 20) / (W - 40) * 46 - 1;
+    let best = 0, bd = Infinity; for (let i = 0; i < BUS.t.length; i++) { const dd = Math.abs(BUS.t[i] / DAY - day); if (dd < bd) { bd = dd; best = i; } }
+    tele.playing = false; $('#btnPlay').textContent = '▶'; setTele(best);
+  });
+
+  // orbit
+  const warp = $('#warp'); warp.value = sim.warp; $('#warpVal').textContent = `${sim.warp}×`;
+  warp.addEventListener('input', () => { sim.warp = Number(warp.value); store.set('warp', sim.warp); $('#warpVal').textContent = `${sim.warp}×`; });
+  $('#follow').addEventListener('change', e => { sim.follow = e.target.checked; });
+  orbitControls.addEventListener('start', () => { if (sim.follow) { sim.follow = false; $('#follow').checked = false; } });
+
+  // prefs
+  const vol = $('#vol'); vol.value = Math.round(sound.volume * 100);
+  vol.addEventListener('input', () => sound.setVolume(vol.value / 100));
+  const amb = $('#amb'); amb.checked = sound.ambience;
+  amb.addEventListener('change', () => sound.setAmbience(amb.checked));
+
+  addEventListener('keydown', e => {
+    if (!started || e.target.closest('textarea, select, input, dialog')) return;
+    const k = e.key;
+    if (k >= '1' && k <= '4') setView(['orbit', 'craft', 'card', 'telemetry'][Number(k) - 1]);
+    else if (k === 'n' || k === 'N') { nextBeacon(); decode(); }
+    else if (k === 'Enter') decode(current.packet || undefined);
+    else if (k === ' ' && view === 'telemetry') { e.preventDefault(); $('#btnPlay').click(); }
+    else if (k === 'ArrowRight' && view === 'telemetry') setTele(tele.i + 1);
+    else if (k === 'ArrowLeft' && view === 'telemetry') setTele(tele.i - 1);
+  });
+  addEventListener('resize', onResize);
+  updateSoundButton();
+}
+function onResize() {
+  fitCamera();
+  renderer.setSize(innerWidth, innerHeight, false);
+  composer.setSize(innerWidth, innerHeight);
+}
+
+/* =====================================================================
+   14. THE DEPLOYMENT — 20 November 2017, Kibo airlock
+   ===================================================================== */
+function caption(d, s) { $('#capD').textContent = d; $('#capS').textContent = s; $('#caption').classList.add('show'); }
+const hideCaption = () => $('#caption').classList.remove('show');
+const attitude = { spin: false, axis: new THREE.Vector3(0.3, 1, 0.45).normalize(), rate: 0.07 };
+async function deploy() {
+  const antennas = [craft.getObjectByName('uhf'), satModel.getObjectByName('uhf')];
+  if (reducedMotion) {
+    station.visible = false; deployedSat = true;
+    antennas.forEach(a => { a.scale.y = 1; });
+    for (let k = 1; k <= 4; k++) { solarMats[k].userData.base = 0; solarMats[k].emissiveIntensity = 0; }
+    flyCraft('craft', 1);
+    await firstBeacon();
+    return;
+  }
+  caption('20 November 2017', 'Kibo airlock · International Space Station');
+  await sleep(900);
+  sound.servo();
+  await tweenP({ dur: 900, ease: Ease.inOutCubic, update: k => { deployDoor.rotation.z = -k * 1.95; } });
+  await sleep(500);
+  sound.spring();
+  // Seen from EcAMSat, the deployer slides straight back along the rails — no rotation
+  // and no sideways drift until the spacecraft is completely clear of the open end.
+  const CLEAR = 48;   // deployer travel before its open end passes EcAMSat's far end
+  await tweenP({ dur: 1500, ease: Ease.outQuad, update: k => station.position.set(-k * CLEAR, 0, 0) });
+  attitude.spin = true; attitude.rate = 0.05;
+  tween({ dur: 9000, ease: Ease.linear, update: k => { const s = k * k * 0.15 + k * 0.85; station.position.set(-CLEAR - s * 480, s * 60, -s * 140); }, done: () => { station.visible = false; } });
+  flyCraft('craft', 5000);
+  await sleep(1200);
+  hideCaption();
+  // the UHF whip springs out once EcAMSat is free
+  tween({ dur: 900, ease: Ease.outBack, update: k => antennas.forEach(a => { a.scale.y = 0.01 + 0.99 * k; }) });
+  await sleep(900);
+  caption('Panels in sunlight', 'solar current climbs from 112 to 484 mA in the first in-orbit minutes');
+  sound.wake();
+  for (let k = 1; k <= 4; k++) {
+    const m = solarMats[k];
+    tween({ dur: 2200, delay: k * 220, ease: Ease.outCubic, update: e => { m.emissiveIntensity = Math.sin(e * Math.PI) * 0.9; }, done: () => { m.userData.base = 0; } });
+  }
+  await sleep(3200);
+  hideCaption();
+  deployedSat = true;
+  await firstBeacon();
+}
+/** The first beacon, as JA0CAW copied it that evening. */
+async function firstBeacon() {
+  const first = BEACONS.findIndex(b => b.station === 'JA0CAW');
+  pickBeacon(first);
+  const dur = sound.beacon(BEACONS[first].packet);
+  toast(`Beacon on 437.100 MHz — first copied by <b>JA0CAW</b>`, 4200);
+  logHeard(BEACONS[first], first);
+  renderTape(BEACONS[first].packet, true);
+  const chars = [...$('#tapeText').querySelectorAll('.ch')];
+  for (let i = 0; i < chars.length; i++) { chars[i].classList.remove('pending'); if (i % 8 === 0) scrollTapeTo(chars[i]); await sleep((dur * 1000) / chars.length); }
+  setStatus('Press decode ▸ or switch to the Decoder view', '');
+  showHint();
+}
+function showHint() {
+  const h = $('#hint'); h.classList.remove('hide');
+  const hide = () => h.classList.add('hide');
+  setTimeout(hide, 9000);
+  canvas.addEventListener('pointerdown', hide, { once: true });
+}
+
+/* =====================================================================
+   15. SELF TEST — runs at boot, results in the console
+   ===================================================================== */
+function selfTest() {
+  const results = [], check = (name, got, want) => results.push({ name, pass: JSON.stringify(got) === JSON.stringify(want), got, want });
+  const a = decodeBeacon('EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B');
+  check('JA0CAW #1 · bus time', a.bus_time_seconds, 2222621);
+  check('JA0CAW #1 · type & battery', [a.data_type, a.type_specific_data.battery_voltage_v], [1, 8.042]);
+  check('JA0CAW #1 · solar panel 1', a.solar_panel.current_ma, 7.1456);
+  check('Byte swap ABCDEF', reverseEndian('ABCDEF', 6), 'EFCDAB');
+  const bad = decodeBeacon('EcAMSat.org   D909229399C5919F5B99A3914F995199B397366737D6444658');
+  check('Corrupt JA1GDE packet flagged', plausibilityWarnings(bad).length > 0, true);
+  check('All 32 packets decode', BEACONS.filter(b => { try { decodeBeacon(b.packet); return true; } catch { return false; } }).length, 32);
+  check('Every packet formats all four health words', BEACONS.every(b => { const dd = decodeBeacon(b.packet); try { return [0, 1, 2, 3].every(i => typeof healthText(dd, i) === 'string'); } catch { return false; } }), true);
+  check('Telemetry sorted', BUS.t.every((t, i) => !i || t >= BUS.t[i - 1]), true);
+  check('Panels wake after deployment', solarTotal(tele.firstSpace) > 100 && solarTotal(0) < 20, true);
+  check('Footprint half-angle ≈ 20°', Math.round(HORIZON / DEG), 20);
+  return results;
+}
+
+/* =====================================================================
+   16. MAIN LOOP & BOOT
+   ===================================================================== */
+let last = performance.now();
+const _q = new THREE.Quaternion(), _qT = new THREE.Quaternion(), _e = new THREE.Euler();
+let lastBeaconAt = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const real = Math.min(1, (now - last) / 1000);   // the orbit clock follows wall time
+  const dt = Math.min(0.05, real); last = now;
+  runTweens(now);
+
+  // spacecraft attitude
+  if (view === 'craft' || view === 'intro' || view === 'orbit') {
+    if (attitude.spin) { _q.setFromAxisAngle(attitude.axis, attitude.rate * dt); craftPivot.quaternion.premultiply(_q); }
+  } else {
+    if (view === 'telemetry') _qT.setFromEuler(_e.set(0.18, reducedMotion ? 0.6 : now * 0.00012, 0)); else _qT.identity();
+    craftPivot.quaternion.slerp(_qT, 1 - Math.exp(-3 * dt));
+  }
+  // wells: quick warm-up, slow fade
+  for (const w of wells) {
+    const rate = w.target > w.level ? 12 : 1.6;
+    w.level += (w.target - w.level) * (1 - Math.exp(-rate * dt));
+    w.mat.emissiveIntensity = w.level;
+  }
+  wellLight.intensity += ((wellLight.userData.target || 0) - wellLight.intensity) * (1 - Math.exp(-4 * dt));
+  if (backdrop) backdrop.rotation.x += dt * 0.0035;
+
+  // orbit simulation runs whenever the spacecraft is flying
+  if (deployedSat) {
+    sim.t += real * 1000 * sim.warp;
+    earth.rotation.y = gmst(sim.t);
+    sunDirOrbit.copy(sunEci(sim.t));
+    orbitSun.position.copy(sunDirOrbit).multiplyScalar(500);
+    orbitScene.children.forEach(o => { if (o.userData.sun) o.position.copy(sunDirOrbit).multiplyScalar(3000); });
+    const pos = satEci(sim.t); _sat.copy(pos);
+    satMarker.position.copy(pos);
+    satModel.quaternion.copy(craftPivot.quaternion);
+    const dir = pos.clone().normalize();
+    updateFootprint(dir);
+    // trail
+    const tp = trail.geometry.attributes.position, tc = trail.geometry.attributes.color, N = trail.userData.n;
+    for (let i = N - 1; i > 0; i--) { tp.setXYZ(i, tp.getX(i - 1), tp.getY(i - 1), tp.getZ(i - 1)); }
+    tp.setXYZ(0, pos.x, pos.y, pos.z);
+    trail.userData.filled = Math.min(N, trail.userData.filled + 1);
+    for (let i = 0; i < N; i++) { const f = i < trail.userData.filled ? Math.pow(1 - i / N, 1.6) : 0; tc.setXYZ(i, 0.5 * f, 0.89 * f, 1.0 * f); }
+    tp.needsUpdate = true; tc.needsUpdate = true;
+    if (Math.floor(now / 500) !== frame.lastPath) { frame.lastPath = Math.floor(now / 500); updateOrbitPath(); }
+    // ground stations: in view → beam, hiss, and that station's next real packet
+    let anyInView = 0;
+    for (const [call, s] of Object.entries(stationPins)) {
+      s.pin.children[0].getWorldPosition(s.world);
+      const ang = s.world.clone().normalize().angleTo(dir);
+      const inView = ang < HORIZON;
+      const beam = beamLines[call];
+      if (inView) {
+        anyInView = Math.max(anyInView, 1 - ang / HORIZON);
+        const bp = beam.geometry.attributes.position; bp.setXYZ(0, s.world.x, s.world.y, s.world.z); bp.setXYZ(1, pos.x, pos.y, pos.z); bp.needsUpdate = true;
+        beam.material.opacity = 0.35 + Math.sin(now * 0.012) * 0.25;
+        s.halo.material.opacity = 0.9;
+        const pass = Math.floor((sim.t - ORBIT.t0) / 1000 / PERIOD_S);
+        if (call !== 'SCU' && s.lastPass !== pass && now - lastBeaconAt > 2500) {
+          s.lastPass = pass; lastBeaconAt = now;
+          const list = BEACONS.map((b, i) => [b, i]).filter(([b]) => b.station === call);
+          const [b, i] = list[s.queue++ % list.length];
+          logHeard(b, i);
+          if (view === 'orbit') { sound.beacon(b.packet, { gain: 0.8 }); toast(`<b>${call}</b> copied a beacon · ${STATIONS[call].area}`); }
+        }
+        if (call === 'SCU' && !s.inView && view === 'orbit') toast('Over <b style="color:var(--gold-hi)">Santa Clara</b> · mission operations pass');
+      } else {
+        beam.material.opacity = 0; s.halo.material.opacity = 0.55;
+      }
+      s.inView = inView;
+    }
+    sound.setHiss(view === 'orbit' ? anyInView : 0);
+    if (view === 'orbit') {
+      if (sim.follow) orbitCam.position.lerp(placeOrbitCam(false), 1 - Math.exp(-1.5 * dt));
+      $('#clock').innerHTML = `<b>${fmtDate(new Date(sim.t))}</b><br>${anyInView ? '<span class="live">● in view of a ground station</span>' : 'beacon every 5 s · 437.100 MHz'}<br>time warp ${sim.warp}×`;
+    }
+  }
+  // telemetry playback: about eight samples a second
+  if (view === 'telemetry' && tele.playing) {
+    tele.acc += real * 8;
+    if (tele.acc >= 1) { const step = Math.floor(tele.acc); tele.acc -= step; if (tele.i + step >= BUS.t.length) { tele.playing = false; $('#btnPlay').textContent = '▶'; } setTele(tele.i + step); }
+  }
+  if (panelOpen) drawWaterfall();
+  (view === 'orbit' ? orbitControls : craftControls).update();
+  composer.render();
+}
+
+async function boot() {
+  try {
+    await Promise.race([
+      Promise.all(['600 52px "Barlow Condensed"', '400 30px Barlow', '500 20px "IBM Plex Mono"'].map(f => document.fonts.load(f))),
+      sleep(3000),
+    ]);
+  } catch { /* fall back to system fonts */ }
+  buildMaterials(); buildCraft(); buildCard(); buildDeployer();
+  requestAnimationFrame(frame);
+  try {
+    await Promise.all([loadData(), loadEarthTextures()]);
+  } catch (err) {
+    console.error(err);
+    $('#powerLabel').textContent = 'Could not load mission data';
+    return;
+  }
+  buildBackdrop(); buildOrbitScene(); updateOrbitPath();
+  setupTelemetry(); bindUI();
+  const results = selfTest();
+  console.table(results);
+  window.__ecamsat = { selfTest, decodeBeacon, plausibilityWarnings, sim, tele, BEACONS: () => BEACONS, BUS: () => BUS, setView: v => setView(v), decode: (p, o) => decode(p, o), three: { renderer, composer, craftScene, orbitScene, craftCam, orbitCam, craft, card, earth, station, deployDoor, craftPivot, attitude, craftControls } };
+  $('#btnPower').disabled = false;
+  $('#powerLabel').textContent = 'Arm the deployer';
+  $('#btnPower').addEventListener('click', powerOn);
+}
+function powerOn() {
+  if (started) return;
+  started = true;
+  sound.init();
+  $('#intro').classList.add('gone');
+  craftControls.enabled = true;
+  view = 'craft';
+  document.querySelectorAll('.views button').forEach(b => b.classList.toggle('active', b.dataset.view === 'craft'));
+  deploy();
+  canvas.focus({ preventScroll: true });
+}
+boot();
+</script>
+</body>
+</html>
