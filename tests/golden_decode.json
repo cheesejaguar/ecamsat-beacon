@@ -1,0 +1,802 @@
+[
+ {
+  "packet": "EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B",
+   "bus_time_seconds": 2222621,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 7.1456,
+    "temperature_c": 15.9891
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11110",
+    "payload_board_temp_c": 22.9192,
+    "battery_voltage_v": 8.042,
+    "payload_heater_current_ma": 8.04
+   },
+   "payload_page_number": 68,
+   "median_card_temp_c": 22.97,
+   "well_number": 48,
+   "taos_r_hz": 13986,
+   "taos_g_hz": 20833,
+   "taos_b_hz": 23391
+  }
+ },
+ {
+  "packet": "EcAMSat.org   1DEA210000F10101000007000A004400F9080DA236BC4DB84F",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   1DEA210000F10101000007000A004400F9080DA236BC4DB84F",
+   "bus_time_seconds": 2222621,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": 12.1311
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.0933,
+    "payload_current_ma": 11.591
+   },
+   "payload_page_number": 68,
+   "median_card_temp_c": 22.97,
+   "well_number": 13,
+   "taos_r_hz": 13986,
+   "taos_g_hz": 19900,
+   "taos_b_hz": 20408
+  }
+ },
+ {
+  "packet": "EcAMSat.org   1DEA210000F001010000030008004400F90819C9341A415B49",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   1DEA210000F001010000030008004400F90819C9341A415B49",
+   "bus_time_seconds": 2222621,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": 12.0748
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.0457,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 68,
+   "median_card_temp_c": 22.97,
+   "well_number": 25,
+   "taos_r_hz": 13513,
+   "taos_g_hz": 16666,
+   "taos_b_hz": 18779
+  }
+ },
+ {
+  "packet": "EcAMSat.org   59EA210000f001010000060008004400550825AD3003495B49",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   59EA210000f001010000060008004400550825AD3003495B49",
+   "bus_time_seconds": 2222681,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": 12.0748
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.0814,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 68,
+   "median_card_temp_c": 21.33,
+   "well_number": 37,
+   "taos_r_hz": 12461,
+   "taos_g_hz": 18691,
+   "taos_b_hz": 18779
+  }
+ },
+ {
+  "packet": "EcAMSat.org   59EA210100EF01010000A70109004400FF0831C9343B445F5B",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   59EA210100EF01010000A70109004400FF0831C9343B445F5B",
+   "bus_time_seconds": 2222681,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -0.1158,
+    "temperature_c": 12.0185
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 5.0437,
+    "payload_current_ma": 8.1629
+   },
+   "payload_page_number": 68,
+   "median_card_temp_c": 23.03,
+   "well_number": 49,
+   "taos_r_hz": 13513,
+   "taos_g_hz": 17467,
+   "taos_b_hz": 23391
+  }
+ },
+ {
+  "packet": "EcAMSat.org   D900220000C6010F5B00A2014F005100B3082ACC3C674A5F5B",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   D900220000C6010F5B00A2014F005100B3082ACC3C674A5F5B",
+   "bus_time_seconds": 2228441,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": 10.8186
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 410.573,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 79
+   },
+   "payload_page_number": 81,
+   "median_card_temp_c": 22.27,
+   "well_number": 42,
+   "taos_r_hz": 15564,
+   "taos_g_hz": 19047,
+   "taos_b_hz": 23391
+  }
+ },
+ {
+  "packet": "EcAMSat.org   D909229399C5919F5B99A3914F995199B397366737D6444658",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   D909229399C5919F5B99A3914F995199B397366737D6444658",
+   "bus_time_seconds": 2230745,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": 73852.8175,
+    "temperature_c": 2071.4603
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 159,
+    "comm_current_ma": 170125.517,
+    "sensor_voltage_v": 484.199,
+    "bus_data_page": 39247
+   },
+   "payload_page_number": 39249,
+   "median_card_temp_c": 388.35,
+   "well_number": 54,
+   "taos_r_hz": 14183,
+   "taos_g_hz": 17622,
+   "taos_b_hz": 22598
+  }
+ },
+ {
+  "packet": "EcAMSat.org   06DD22000004011E3902A2020100CE006F0610E1357D42E462",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   06DD22000004011E3902A2020100CE006F0610E1357D42E462",
+   "bus_time_seconds": 2284806,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -0.888
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11110",
+    "payload_board_temp_c": 15.7726,
+    "battery_voltage_v": 7.9706,
+    "payload_heater_current_ma": 11.3322
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 16,
+   "taos_r_hz": 13793,
+   "taos_g_hz": 17021,
+   "taos_b_hz": 25316
+  }
+ },
+ {
+  "packet": "EcAMSat.org   06DD22000004011E3902A2020200CE006F061C0639B3462050",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   06DD22000004011E3902A2020200CE006F061C0639B3462050",
+   "bus_time_seconds": 2284806,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -0.888
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11110",
+    "payload_board_temp_c": 15.7726,
+    "battery_voltage_v": 7.9706,
+    "payload_heater_current_ma": 14.6244
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 28,
+   "taos_r_hz": 14598,
+   "taos_g_hz": 18099,
+   "taos_b_hz": 20512
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD22000002011E3902A2020300CE006F0634013FBC4D205E",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD22000002011E3902A2020300CE006F0634013FBC4D205E",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -0.9994
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11110",
+    "payload_board_temp_c": 15.7726,
+    "battery_voltage_v": 7.9706,
+    "payload_heater_current_ma": 17.9166
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 52,
+   "taos_r_hz": 16129,
+   "taos_g_hz": 19900,
+   "taos_b_hz": 24096
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220200A500010000A7010800CE006F0605803E5648CE56",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220200A500010000A7010800CE006F0605803E5648CE56",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": 0.8384,
+    "temperature_c": -6.5605
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 5.0437,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 5,
+   "taos_r_hz": 16000,
+   "taos_g_hz": 18518,
+   "taos_b_hz": 22222
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000A400010000A7010800CE006F061D000000000000",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000A400010000A7010800CE006F061D000000000000",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": -6.6168
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 5.0437,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 29,
+   "taos_r_hz": 0,
+   "taos_g_hz": 0,
+   "taos_b_hz": 0
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220300A300010000A7010800CE006F0629843D05471F66",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220300A300010000A7010800CE006F0629843D05471F66",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": 1.7926,
+    "temperature_c": -6.6731
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 5.0437,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 41,
+   "taos_r_hz": 15748,
+   "taos_g_hz": 18181,
+   "taos_b_hz": 26143
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000A300010000A7010800CE006F06350038384C5356",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000A300010000A7010800CE006F06350038384C5356",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": -6.6731
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 5.0437,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 53,
+   "taos_r_hz": 14336,
+   "taos_g_hz": 19512,
+   "taos_b_hz": 22099
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000E6000F5B00A201C400CE006F0606403EA443465F",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000E6000F5B00A201C400CE006F0606403EA443465F",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -1.703
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 410.573,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 6,
+   "taos_r_hz": 15936,
+   "taos_g_hz": 17316,
+   "taos_b_hz": 24390
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000E5000F5A00A301C400CE006F0612DD3BC24AD94B",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000E5000F5A00A301C400CE006F0612DD3BC24AD94B",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -1.7589
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 406.24,
+    "sensor_voltage_v": 4.967,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.47,
+   "well_number": 18,
+   "taos_r_hz": 15325,
+   "taos_g_hz": 19138,
+   "taos_b_hz": 19417
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000FC001F38029E020300CE00610600013FD540C642",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000FC001F38029E020300CE00610600013FD540C642",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -1.3336
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11111",
+    "payload_board_temp_c": 15.7172,
+    "battery_voltage_v": 7.923,
+    "payload_heater_current_ma": 17.9166
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.33,
+   "well_number": 0,
+   "taos_r_hz": 16129,
+   "taos_g_hz": 16597,
+   "taos_b_hz": 17094
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000FB001F38029E020300CE0061060CBD3A5943DA55",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000FB001F38029E020300CE0061060CBD3A5943DA55",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -1.3893
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11111",
+    "payload_board_temp_c": 15.7172,
+    "battery_voltage_v": 7.923,
+    "payload_heater_current_ma": 17.9166
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.33,
+   "well_number": 12,
+   "taos_r_hz": 15037,
+   "taos_g_hz": 17241,
+   "taos_b_hz": 21978
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000FA001F38029E020100CE006106185335D94B7360",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000FA001F38029E020100CE006106185335D94B7360",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -1.445
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11111",
+    "payload_board_temp_c": 15.7172,
+    "battery_voltage_v": 7.923,
+    "payload_heater_current_ma": 11.3322
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.33,
+   "well_number": 24,
+   "taos_r_hz": 13651,
+   "taos_g_hz": 19417,
+   "taos_b_hz": 24691
+  }
+ },
+ {
+  "packet": "EcAMSat.org   42DD220000F9001F38029E020200CE006106249C380940B84F",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   42DD220000F9001F38029E020200CE006106249C380940B84F",
+   "bus_time_seconds": 2284866,
+   "solar_panel": {
+    "panel_number": 1,
+    "current_ma": 3.41,
+    "temperature_c": -1.5007
+   },
+   "data_type": 1,
+   "type_specific_data": {
+    "power_port_status": "0b11111",
+    "payload_board_temp_c": 15.7172,
+    "battery_voltage_v": 7.923,
+    "payload_heater_current_ma": 14.6244
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.33,
+   "well_number": 36,
+   "taos_r_hz": 14492,
+   "taos_g_hz": 16393,
+   "taos_b_hz": 20408
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD22010099000100000B000800CE00690619D336EF43674A",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD22010099000100000B000800CE00690619D336EF43674A",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -0.1158,
+    "temperature_c": -7.2361
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.1409,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 25,
+   "taos_r_hz": 14035,
+   "taos_g_hz": 17391,
+   "taos_b_hz": 19047
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220700980001000006000800CE00690625C231C24A1E4B",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220700980001000006000800CE00690625C231C24A1E4B",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": 5.6094,
+    "temperature_c": -7.2924
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.0814,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 37,
+   "taos_r_hz": 12738,
+   "taos_g_hz": 19138,
+   "taos_b_hz": 19230
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220000980001000005000800CE006906314036C145015D",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220000980001000005000800CE006906314036C145015D",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 2,
+    "current_ma": -1.07,
+    "temperature_c": -7.2924
+   },
+   "data_type": 2,
+   "type_specific_data": {
+    "startup_counter": 1,
+    "radiation_counts_per_30s": 0,
+    "comm_voltage_v": 0.0695,
+    "payload_current_ma": 4.7348
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 49,
+   "taos_r_hz": 13888,
+   "taos_g_hz": 17857,
+   "taos_b_hz": 23809
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220000DD000F0000A201C400CE006906022F3B0547B349",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220000DD000F0000A201C400CE006906022F3B0547B349",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -2.2061
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 16.27,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 2,
+   "taos_r_hz": 15151,
+   "taos_g_hz": 18181,
+   "taos_b_hz": 18867
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220100DC000F5A00A201C400CE0069060ECC3CC642CE56",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220100DC000F5A00A201C400CE0069060ECC3CC642CE56",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": 1.4685,
+    "temperature_c": -2.262
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 406.24,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 14,
+   "taos_r_hz": 15564,
+   "taos_g_hz": 17094,
+   "taos_b_hz": 22222
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220000DA000F5A00A201C400CE0069061AE933C03EEA4E",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220000DA000F5A00A201C400CE0069061AE933C03EEA4E",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -2.3738
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 406.24,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 26,
+   "taos_r_hz": 13289,
+   "taos_g_hz": 16064,
+   "taos_b_hz": 20202
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220000D8000F5A00A301C400CE00690632C82E7A675356",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220000D8000F5A00A301C400CE00690632C82E7A675356",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -2.4856
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 406.24,
+    "sensor_voltage_v": 4.967,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 50,
+   "taos_r_hz": 11976,
+   "taos_g_hz": 26490,
+   "taos_b_hz": 22099
+  }
+ },
+ {
+  "packet": "EcAMSat.org   7EDD220000D60001A70135020000CE00690603C03E01488563",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   7EDD220000D60001A70135020000CE00690603C03E01488563",
+   "bus_time_seconds": 2284926,
+   "solar_panel": {
+    "panel_number": 4,
+    "current_ma": -1.04,
+    "temperature_c": -3.766
+   },
+   "data_type": 4,
+   "type_specific_data": {
+    "experiment_phase": "0b1",
+    "comm_voltage_v": 5.0437,
+    "bus_voltage_v": 3.3335,
+    "register_file_wrap_count": 0
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 3,
+   "taos_r_hz": 16064,
+   "taos_g_hz": 18433,
+   "taos_b_hz": 25477
+  }
+ },
+ {
+  "packet": "EcAMSat.org   BADD220000D40001A70135020000CE00690627DE392050CE56",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   BADD220000D40001A70135020000CE00690627DE392050CE56",
+   "bus_time_seconds": 2284986,
+   "solar_panel": {
+    "panel_number": 4,
+    "current_ma": -1.04,
+    "temperature_c": -3.878
+   },
+   "data_type": 4,
+   "type_specific_data": {
+    "experiment_phase": "0b1",
+    "comm_voltage_v": 5.0437,
+    "bus_voltage_v": 3.3335,
+    "register_file_wrap_count": 0
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 39,
+   "taos_r_hz": 14814,
+   "taos_g_hz": 20512,
+   "taos_b_hz": 22222
+  }
+ },
+ {
+  "packet": "EcAMSat.org   BADD220000D40001A70135020000CE00690633BD3A0547465F",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   BADD220000D40001A70135020000CE00690633BD3A0547465F",
+   "bus_time_seconds": 2284986,
+   "solar_panel": {
+    "panel_number": 4,
+    "current_ma": -1.04,
+    "temperature_c": -3.878
+   },
+   "data_type": 4,
+   "type_specific_data": {
+    "experiment_phase": "0b1",
+    "comm_voltage_v": 5.0437,
+    "bus_voltage_v": 3.3335,
+    "register_file_wrap_count": 0
+   },
+   "payload_page_number": 206,
+   "median_card_temp_c": 16.41,
+   "well_number": 51,
+   "taos_r_hz": 15037,
+   "taos_g_hz": 18181,
+   "taos_b_hz": 24390
+  }
+ },
+ {
+  "packet": "EcAMSat.org   CCDD220000D4000F5A00A201C400CF006F061EDE39C642B25E",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   CCDD220000D4000F5A00A201C400CF006F061EDE39C642B25E",
+   "bus_time_seconds": 2285004,
+   "solar_panel": {
+    "panel_number": 3,
+    "current_ma": -0.41,
+    "temperature_c": -2.7092
+   },
+   "data_type": 3,
+   "type_specific_data": {
+    "spacecraft_ground_id": 15,
+    "comm_current_ma": 406.24,
+    "sensor_voltage_v": 4.954,
+    "bus_data_page": 196
+   },
+   "payload_page_number": 207,
+   "median_card_temp_c": 16.47,
+   "well_number": 30,
+   "taos_r_hz": 14814,
+   "taos_g_hz": 17094,
+   "taos_b_hz": 24242
+  }
+ },
+ {
+  "packet": "EcAMSat.org   CCDD220000CF0001350035020000CF006F0607A443BC4DAD13",
+  "decoded": {
+   "raw_packet": "EcAMSat.org   CCDD220000CF0001350035020000CF006F0607A443BC4DAD13",
+   "bus_time_seconds": 2285004,
+   "solar_panel": {
+    "panel_number": 4,
+    "current_ma": -1.04,
+    "temperature_c": -4.158
+   },
+   "data_type": 4,
+   "type_specific_data": {
+    "experiment_phase": "0b1",
+    "comm_voltage_v": 0.6407,
+    "bus_voltage_v": 3.3335,
+    "register_file_wrap_count": 0
+   },
+   "payload_page_number": 207,
+   "median_card_temp_c": 16.47,
+   "well_number": 7,
+   "taos_r_hz": 17316,
+   "taos_g_hz": 19900,
+   "taos_b_hz": 5037
+  }
+ }
+]

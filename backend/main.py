@@ -202,10 +202,10 @@ async def decode_packet(request: DecodeRequest):
 async def get_samples():
     """Get sample beacon packets for testing"""
     descriptions = [
-        "Sample from JA0CAW station - Data Type 3",
+        "Sample from JA0CAW station - Data Type 1",
         "Sample from JA0CAW station - Data Type 2",
-        "Sample from JA1GDE station - Data Type 4",
-        "Sample from DK3WN station - Data Type 2",
+        "Sample from JA1GDE station - Data Type 3",
+        "Sample from DK3WN station - Data Type 1",
         "Sample from DK3WN station - Data Type 2",
     ]
 

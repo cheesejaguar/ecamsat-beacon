@@ -2,6 +2,14 @@
 
 A web application for decoding telemetry data from NASA's EcAMSat (E. coli AntiMicrobial Satellite) beacon packets.
 
+## Live 3D mission
+
+**[cheesejaguar.github.io/ecamsat-beacon](https://cheesejaguar.github.io/ecamsat-beacon/)** is an interactive 3D tribute to [`beacon.py`](beacon.py), the decoder written here on 20 November 2017, the day EcAMSat left the International Space Station. Watch it slide out of its deployer, hear real beacon packets as 1200-baud AFSK, follow each packet through the decoder byte by byte (the bytes physically swap), light up the well on the fluidic card the packet reports, and replay 1,121 samples of real 2017 bus telemetry.
+
+The spacecraft, deployer, card, textures and sound are all generated in the browser by [`site/index.html`](site/index.html). The model follows photos of the flight unit and NASA's ISS deployment frames. [`site/decoder.js`](site/decoder.js) is a JavaScript port of the decoder, and `node --test tests/*.test.mjs` checks it against the Python decoder on all 32 ham-received packets. [`tools/build_data.py`](tools/build_data.py) regenerates the site's data files, and [`.github/workflows/pages.yml`](.github/workflows/pages.yml) deploys `site/`. The Earth imagery is NASA's Blue Marble Next Generation and Black Marble 2016.
+
+Run it locally with `python3 -m http.server 8765 --directory site`.
+
 ## About EcAMSat
 
 EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of microgravity on antibiotic resistance in E. coli bacteria. The satellite transmitted beacon packets containing telemetry data that amateur radio operators could receive and decode.
@@ -26,7 +34,7 @@ EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of micr
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ecamsat-beacon.git
+   git clone https://github.com/cheesejaguar/ecamsat-beacon.git
    cd ecamsat-beacon
    ```
 
@@ -39,7 +47,7 @@ EcAMSat was a NASA CubeSat mission launched in 2017 to study the effects of micr
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ecamsat-beacon.git
+   git clone https://github.com/cheesejaguar/ecamsat-beacon.git
    cd ecamsat-beacon
    ```
 

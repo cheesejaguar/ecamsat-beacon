@@ -1,0 +1,38 @@
+name: Deploy EcAMSat 3D to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - 'tests/*.mjs'
+      - 'tests/golden_decode.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # The JS decoder must match the Python decoder on every ham-received packet.
+      - run: node --test tests/*.test.mjs
+      - uses: actions/configure-pages@v6
+      # Only the site/ folder is published — never the repository root.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5
