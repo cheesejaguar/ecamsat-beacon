@@ -2,6 +2,10 @@
 Unit tests for the beacon decoder module.
 """
 
+import json
+from dataclasses import asdict
+from pathlib import Path
+
 import pytest
 from backend.decoder import (
     reverse_endian,
@@ -21,6 +25,8 @@ from backend.decoder import (
     DataType4,
     DecodedBeacon,
 )
+
+GOLDEN_FILE = Path(__file__).parent / "golden_decode.json"
 
 
 class TestReverseEndian:
@@ -93,6 +99,27 @@ class TestValidatePacket:
         is_valid, error = validate_packet(packet)
         assert is_valid is False
         assert "invalid hexadecimal" in error
+
+    @pytest.mark.parametrize("hex_portion", [
+        # int(x, 16) accepts all of these, but none is a hex digit string
+        "+DEA21020033021EBA02A80200004400F90830A23661515F5B",
+        "1D_A21020033021EBA02A80200004400F90830A23661515F5B",
+        "0xEA21020033021EBA02A80200004400F90830A23661515F5B",
+        " DEA21020033021EBA02A80200004400F90830A23661515F5B",
+        "1DEA21020033021EBA02A80200004400F90830A23661515F5\u0663",
+    ])
+    def test_packet_int_parsable_but_not_hex(self, hex_portion):
+        """Signs, underscores, 0x prefixes, spaces and non-ASCII digits are rejected."""
+        packet = "EcAMSat.org   " + hex_portion
+        assert len(packet) == 64
+        is_valid, error = validate_packet(packet)
+        assert is_valid is False
+        assert "invalid hexadecimal" in error
+
+    def test_lowercase_hex_accepted(self):
+        """Lowercase hex digits are valid (one ham-received packet uses them)."""
+        packet = "EcAMSat.org   1dea21020033021eba02a80200004400f90830a23661515f5b"
+        assert validate_packet(packet) == (True, "")
 
 
 class TestDecodeSolarPanel:
@@ -179,6 +206,10 @@ class TestDecodeType2:
         result = decode_type2("FF", 1000, 1000, 1000)
         assert result.startup_counter == 255
         assert result.radiation_counts_per_30s == 1000
+        # 1000 * 0.0119 + 0.01 = 11.91
+        assert result.comm_voltage_v == pytest.approx(11.91)
+        # 1000 * 3.4281 - 22.69 = 3405.41
+        assert result.payload_current_ma == pytest.approx(3405.41)
 
 
 class TestDecodeType3:
@@ -234,7 +265,13 @@ class TestDecodeBeacon:
 
         assert result.data_type == 2
         assert result.well_number == 13
-        assert isinstance(result.type_specific_data, DataType2)
+        assert result.solar_panel == SolarPanelData(2, -1.07, 12.1311)
+        assert result.type_specific_data == DataType2(
+            startup_counter=1,
+            radiation_counts_per_30s=0,
+            comm_voltage_v=0.0933,
+            payload_current_ma=11.591,
+        )
 
     def test_decode_beacon_type3(self):
         """Test decoding of a Type 3 packet."""
@@ -243,7 +280,14 @@ class TestDecodeBeacon:
 
         assert result.data_type == 3
         assert result.well_number == 42
-        assert isinstance(result.type_specific_data, DataType3)
+        assert result.bus_time_seconds == 2228441
+        assert result.solar_panel == SolarPanelData(3, -0.41, 10.8186)
+        assert result.type_specific_data == DataType3(
+            spacecraft_ground_id=15,
+            comm_current_ma=410.573,
+            sensor_voltage_v=4.954,
+            bus_data_page=79,
+        )
 
     def test_decode_beacon_type4(self):
         """Test decoding of a Type 4 packet."""
@@ -254,7 +298,14 @@ class TestDecodeBeacon:
 
         assert result.data_type == 4
         assert result.well_number == 3
-        assert isinstance(result.type_specific_data, DataType4)
+        # Same raw bytes as sample 1, decoded with panel 4 / type 4 calibration
+        assert result.solar_panel == SolarPanelData(4, 0.8724, 15.778)
+        assert result.type_specific_data == DataType4(
+            experiment_phase="0b11110",
+            comm_voltage_v=8.3162,
+            bus_voltage_v=4.012,
+            register_file_wrap_count=0,
+        )
 
     def test_decode_beacon_with_whitespace(self):
         """Test that whitespace is trimmed from packet."""
@@ -280,82 +331,36 @@ class TestDecodeBeacon:
             decode_beacon(packet)
 
     def test_decode_all_sample_beacons(self):
-        """Test that all sample beacons decode successfully."""
-        for packet in SAMPLE_BEACONS:
-            result = decode_beacon(packet)
-            assert isinstance(result, DecodedBeacon)
-            assert result.bus_time_seconds > 0
-            assert result.data_type in [1, 2, 3, 4]
+        """Sample beacons decode to the data types the API describes them as."""
+        assert [decode_beacon(p).data_type for p in SAMPLE_BEACONS] == [1, 2, 3, 1, 2]
+
+    def test_matches_golden_file(self):
+        """Every ham-received packet decodes exactly as recorded in golden_decode.json.
+
+        The JS decoder is tested against the same file, so this keeps both in sync.
+        """
+        golden = json.loads(GOLDEN_FILE.read_text())
+        assert len(golden) == 32
+        for entry in golden:
+            assert asdict(decode_beacon(entry["packet"])) == entry["decoded"], entry["packet"]
 
     def test_decode_beacon_light_sensors(self):
         """Test that light sensor values are decoded correctly."""
         packet = "EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B"
         result = decode_beacon(packet)
 
-        # Verify light sensors are populated
-        assert result.taos_r_hz > 0
-        assert result.taos_g_hz > 0
-        assert result.taos_b_hz > 0
+        # 3661 -> 6136 = 13986, 5151 -> 5151 = 20833, 5F5B -> 5B5F = 23391
+        assert result.taos_r_hz == 13986
+        assert result.taos_g_hz == 20833
+        assert result.taos_b_hz == 23391
 
     def test_decode_beacon_median_card_temp(self):
         """Test median card temperature calculation."""
         packet = "EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B"
         result = decode_beacon(packet)
 
-        # CardTempM raw = 0830 -> reversed = 3008 -> int = 12296 -> /100 = 122.96... wait
-        # Let me check: 46:50 is "F908" -> reversed = "08F9" = 2297 -> /100 = 22.97
-        assert result.median_card_temp_c == pytest.approx(22.97, rel=0.01)
-
-
-class TestDataclasses:
-    """Tests for the dataclass structures."""
-
-    def test_solar_panel_data(self):
-        """Test SolarPanelData creation."""
-        data = SolarPanelData(panel_number=1, current_ma=100.5, temperature_c=25.3)
-        assert data.panel_number == 1
-        assert data.current_ma == 100.5
-        assert data.temperature_c == 25.3
-
-    def test_datatype1(self):
-        """Test DataType1 creation."""
-        data = DataType1(
-            power_port_status="0b1111",
-            payload_board_temp_c=25.0,
-            battery_voltage_v=8.0,
-            payload_heater_current_ma=100.0
-        )
-        assert data.power_port_status == "0b1111"
-
-    def test_datatype2(self):
-        """Test DataType2 creation."""
-        data = DataType2(
-            startup_counter=10,
-            radiation_counts_per_30s=50,
-            comm_voltage_v=8.0,
-            payload_current_ma=100.0
-        )
-        assert data.startup_counter == 10
-
-    def test_datatype3(self):
-        """Test DataType3 creation."""
-        data = DataType3(
-            spacecraft_ground_id=42,
-            comm_current_ma=100.0,
-            sensor_voltage_v=5.0,
-            bus_data_page=1
-        )
-        assert data.spacecraft_ground_id == 42
-
-    def test_datatype4(self):
-        """Test DataType4 creation."""
-        data = DataType4(
-            experiment_phase="0b1010",
-            comm_voltage_v=8.0,
-            bus_voltage_v=5.0,
-            register_file_wrap_count=3
-        )
-        assert data.experiment_phase == "0b1010"
+        # 46:50 is "F908" -> reversed = "08F9" = 2297 -> /100 = 22.97
+        assert result.median_card_temp_c == 22.97
 
 
 class TestSampleBeacons:

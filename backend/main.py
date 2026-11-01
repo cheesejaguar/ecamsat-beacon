@@ -188,7 +188,7 @@ async def decode_packet(request: DecodeRequest):
         )
     except BeaconDecodeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - defensive; validate_packet rejects all unparseable input
         raise HTTPException(status_code=500, detail=f"Decoding error: {str(e)}")
 
 

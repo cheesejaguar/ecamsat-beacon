@@ -8,6 +8,7 @@ http://ecamsat.engr.scu.edu/beacon/EcAMSatBeaconDecoding.pdf
 Rewritten for FastAPI by Claude
 """
 
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -114,11 +115,10 @@ def validate_packet(packet: str) -> tuple[bool, str]:
     if packet[0:14] != expected_header:
         return False, f"Invalid header. Expected '{expected_header}', got '{packet[0:14]}'"
 
-    # Check if remaining characters are valid hex
+    # Check if remaining characters are valid hex. int(x, 16) is not enough:
+    # it also accepts a sign, underscores, "0x" and non-ASCII digits.
     hex_portion = packet[14:]
-    try:
-        int(hex_portion, 16)
-    except ValueError:
+    if not re.fullmatch(r"[0-9a-fA-F]+", hex_portion):
         return False, "Packet contains invalid hexadecimal characters"
 
     return True, ""
