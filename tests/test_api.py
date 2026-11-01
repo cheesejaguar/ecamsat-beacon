@@ -3,11 +3,12 @@ Unit tests for the FastAPI endpoints.
 """
 
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from backend.main import app, convert_type_data, __version__
-from backend.decoder import DataType1, DataType2, DataType3, DataType4
+from backend.decoder import (
+    DataType1, DataType2, DataType3, DataType4, SAMPLE_BEACONS, decode_beacon,
+)
 
 
 @pytest.fixture
@@ -38,15 +39,13 @@ class TestSamplesEndpoint:
         response = client.get("/api/samples")
         assert response.status_code == 200
 
-        data = response.json()
-        assert "samples" in data
-        assert len(data["samples"]) > 0
+        samples = response.json()["samples"]
+        assert [s["packet"] for s in samples] == SAMPLE_BEACONS
 
-        # Verify sample structure
-        sample = data["samples"][0]
-        assert "packet" in sample
-        assert "description" in sample
-        assert len(sample["packet"]) == 64
+        # Each description names the data type the packet actually decodes to
+        for sample in samples:
+            data_type = decode_beacon(sample["packet"]).data_type
+            assert sample["description"].endswith(f"Data Type {data_type}")
 
 
 class TestDecodeEndpoint:
@@ -65,21 +64,22 @@ class TestDecodeEndpoint:
         assert data["bus_time_seconds"] == 2222621
         assert data["data_type"] == 1
 
-        # Check solar panel data
-        assert "solar_panel" in data
-        assert data["solar_panel"]["panel_number"] == 1
-        assert "current_ma" in data["solar_panel"]
-        assert "temperature_c" in data["solar_panel"]
-
-        # Check type-specific data
-        assert "type_specific_data" in data
-        assert data["type_specific_data"]["type_name"] == "Power and Temperature"
-
-        # Check light sensors
-        assert "light_sensors" in data
-        assert "red_hz" in data["light_sensors"]
-        assert "green_hz" in data["light_sensors"]
-        assert "blue_hz" in data["light_sensors"]
+        assert data["well_number"] == 48
+        assert data["payload_page_number"] == 68
+        assert data["median_card_temp_c"] == 22.97
+        assert data["solar_panel"] == {
+            "panel_number": 1, "current_ma": 7.1456, "temperature_c": 15.9891,
+        }
+        assert data["type_specific_data"] == {
+            "type_name": "Power and Temperature",
+            "power_port_status": "0b11110",
+            "payload_board_temp_c": 22.9192,
+            "battery_voltage_v": 8.042,
+            "payload_heater_current_ma": 8.04,
+        }
+        assert data["light_sensors"] == {
+            "red_hz": 13986, "green_hz": 20833, "blue_hz": 23391,
+        }
 
     def test_decode_type2_packet(self, client):
         """Test decoding a Type 2 packet."""
@@ -90,9 +90,13 @@ class TestDecodeEndpoint:
         data = response.json()
 
         assert data["data_type"] == 2
-        assert data["type_specific_data"]["type_name"] == "Startup and Radiation"
-        assert "startup_counter" in data["type_specific_data"]
-        assert "radiation_counts_per_30s" in data["type_specific_data"]
+        assert data["type_specific_data"] == {
+            "type_name": "Startup and Radiation",
+            "startup_counter": 1,
+            "radiation_counts_per_30s": 0,
+            "comm_voltage_v": 0.0933,
+            "payload_current_ma": 11.591,
+        }
 
     def test_decode_type3_packet(self, client):
         """Test decoding a Type 3 packet."""
@@ -103,9 +107,13 @@ class TestDecodeEndpoint:
         data = response.json()
 
         assert data["data_type"] == 3
-        assert data["type_specific_data"]["type_name"] == "Communication and Sensor"
-        assert "spacecraft_ground_id" in data["type_specific_data"]
-        assert "comm_current_ma" in data["type_specific_data"]
+        assert data["type_specific_data"] == {
+            "type_name": "Communication and Sensor",
+            "spacecraft_ground_id": 15,
+            "comm_current_ma": 410.573,
+            "sensor_voltage_v": 4.954,
+            "bus_data_page": 79,
+        }
 
     def test_decode_type4_packet(self, client):
         """Test decoding a Type 4 packet."""
@@ -118,9 +126,13 @@ class TestDecodeEndpoint:
 
         assert data["data_type"] == 4
         assert data["well_number"] == 3
-        assert data["type_specific_data"]["type_name"] == "Experiment and Bus"
-        assert "experiment_phase" in data["type_specific_data"]
-        assert "bus_voltage_v" in data["type_specific_data"]
+        assert data["type_specific_data"] == {
+            "type_name": "Experiment and Bus",
+            "experiment_phase": "0b11110",
+            "comm_voltage_v": 8.3162,
+            "bus_voltage_v": 4.012,
+            "register_file_wrap_count": 0,
+        }
 
     def test_decode_invalid_packet_short(self, client):
         """Test decoding a packet that's too short."""
@@ -169,18 +181,16 @@ class TestDecodeEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
+        assert data["raw_packet"] == packet.strip()
+        assert data["bus_time_seconds"] == 2222621
 
-    def test_decode_internal_error(self, client):
-        """Test that unexpected errors return 500."""
-        with patch("backend.main.decode_beacon") as mock_decode:
-            mock_decode.side_effect = RuntimeError("Unexpected error")
-            packet = "EcAMSat.org   1DEA21020033021EBA02A80200004400F90830A23661515F5B"
-            response = client.post("/api/decode", json={"packet": packet})
+    def test_decode_signed_hex_rejected(self, client):
+        """A packet int() would parse but that is not pure hex is a 400, not a 500."""
+        packet = "EcAMSat.org   +DEA21020033021EBA02A80200004400F90830A23661515F5B"
+        response = client.post("/api/decode", json={"packet": packet})
 
-            assert response.status_code == 500
-            data = response.json()
-            assert "Decoding error" in data["detail"]
-            assert "Unexpected error" in data["detail"]
+        assert response.status_code == 400
+        assert "hexadecimal" in response.json()["detail"]
 
 
 class TestFrontendEndpoint:
@@ -191,6 +201,7 @@ class TestFrontendEndpoint:
         response = client.get("/")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
+        assert "/static/js/app.js" in response.text
 
 
 class TestConvertTypeData:
